@@ -1,15 +1,19 @@
 {
   "name": "deltav-ots",
+  "version": "0.1.0",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
+  "description": "Operator Training Simulator – DeltaV Live runtime look-and-feel (HTML + TypeScript)",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "devDependencies": {
-    "typescript": "~7.0.2",
-    "vite": "^8.3.6"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
   }
 }
