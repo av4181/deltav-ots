@@ -1,9 +1,9 @@
-import { AnalogInput } from '../sim/ai';
-import { DiscreteDevice, type DiscreteCfg } from '../sim/discrete';
-import { EquipmentModule } from '../sim/em';
-import { Pid } from '../sim/pid';
-import { Plant } from '../sim/plant';
-import { TankProcess } from '../sim/process';
+import { AnalogInput } from '../dcs/ai';
+import { DiscreteDevice, type DiscreteCfg } from '../dcs/discrete';
+import { EquipmentModule } from '../dcs/em';
+import { Pid } from '../dcs/pid';
+import { Plant } from '../dcs/plant';
+import { TankProcess, solveSteadySignal } from './tank101Process';
 
 export type InitState = 'RUNNING' | 'COLD';
 
@@ -12,6 +12,10 @@ export interface Tank101 {
   process: TankProcess;
   li101: AnalogInput;
   ft102: AnalogInput;
+  pi101: AnalogInput;
+  pi102: AnalogInput;
+  pdi101: AnalogInput;
+  ii102: AnalogInput;
   xv101: DiscreteDevice;
   mtr102: DiscreteDevice;
   lic101: Pid;
@@ -50,7 +54,11 @@ export function buildTank101(init: InitState, seed = 42): Tank101 {
   const ctx = plant.ctx;
   const running = init === 'RUNNING';
 
-  const process = new TankProcess(running ? 500 : 150, 30, running ? 28.7 : 0, running ? 30 : 0);
+  // Beginstand "Running" komt uit het model zelf: FCV-signaal waarbij uitstroom = voeding (geen start-transiënt).
+  const steadyPct = running ? solveSteadySignal(500, 30) * 100 : 0;
+  const process = new TankProcess(running ? 500 : 150, 30, steadyPct, running);
+  if (running) for (let i = 0; i < 400; i++) process.update(0.5, 1, true, steadyPct); // model inregelen op het stationaire punt
+  if (running) process.level = 500;
 
   // ---- instrumenten ----
   const li101 = plant.addModule(
@@ -66,6 +74,30 @@ export function buildTank101(init: InitState, seed = 42): Tank101 {
       tau: 0.8,
       noise: 0.2,
     }),
+  );
+
+  // Procesinstrumentatie: de operator ziet enkel transmitterwaarden, nooit de interne modelvariabelen.
+  const pdi101 = plant.addModule(
+    new AnalogInput(ctx, 'PDI-101', 'Suction filter F-101 differential pressure', UNIT, 'bar', 0, 1, () => process.filterDpBar, [
+      { param: 'HI_HI_ALM', limit: 0.3, priority: 'CRITICAL' },
+      { param: 'HI_ALM', limit: 0.1, priority: 'WARNING' },
+    ], { tau: 1, noise: 0.002, deadband: 0.01, decimals: 2 }),
+  );
+  const pi101 = plant.addModule(
+    new AnalogInput(ctx, 'PI-101', 'Pump P-102 suction pressure', UNIT, 'bara', 0, 5, () => process.suctionPressure, [
+      { param: 'LO_ALM', limit: 0.8, priority: 'WARNING' },
+      { param: 'LO_LO_ALM', limit: 0.5, priority: 'CRITICAL' },
+    ], { tau: 1, noise: 0.003, deadband: 0.05, decimals: 2 }),
+  );
+  const pi102 = plant.addModule(
+    new AnalogInput(ctx, 'PI-102', 'Pump P-102 discharge pressure', UNIT, 'bara', 0, 10, () => process.dischargePressure, [
+      { param: 'HI_ALM', limit: 6, priority: 'ADVISORY' },
+    ], { tau: 1, noise: 0.005, deadband: 0.1, decimals: 2 }),
+  );
+  const ii102 = plant.addModule(
+    new AnalogInput(ctx, 'II-102', 'Motor MTR-102 current', UNIT, 'A', 0, 20, () => process.motorCurrent, [
+      { param: 'HI_ALM', limit: 9, priority: 'WARNING' },
+    ], { tau: 0.5, noise: 0.05, deadband: 0.3, decimals: 1 }),
   );
 
   // ---- kleppen en motor ----
@@ -105,7 +137,7 @@ export function buildTank101(init: InitState, seed = 42): Tank101 {
         { param: 'LO_ALM', limit: 10, priority: 'ADVISORY' },
       ],
       { kp: 0.5, ti: 6, direct: false, deadband: 2 },
-      { sp: running ? 30 : 0, out: running ? 28.7 : 0, mode: running ? 'CAS' : 'AUTO' }),
+      { sp: running ? 30 : 0, out: steadyPct, mode: running ? 'CAS' : 'AUTO' }),
   );
   fic102.primary = lic101;
   lic101.secondary = fic102;
@@ -166,13 +198,13 @@ export function buildTank101(init: InitState, seed = 42): Tank101 {
     tag: UNIT,
     description: 'Tank 101 storage unit',
     area: ctx.area,
-    modules: ['LI-101', 'FT-102', 'XV-101', 'MTR-102', 'LIC-101', 'FIC-102', 'EM_T101'],
+    modules: ['LI-101', 'FT-102', 'PDI-101', 'PI-101', 'PI-102', 'II-102', 'XV-101', 'MTR-102', 'LIC-101', 'FIC-102', 'EM_T101'],
   });
   plant.addNode({ name: 'CTLR1', type: 'Controller', primaryOk: true, secondaryOk: true });
   plant.addNode({ name: 'OPS1', type: 'Workstation', primaryOk: true, secondaryOk: true });
 
   // ---- fysisch proces koppelen (vóór de modules) ----
-  plant.onPre((dt) => process.update(dt, xv101.position, mtr102.position, fic102.out));
+  plant.onPre((dt) => process.update(dt, xv101.position, mtr102.sp === 1 && mtr102.position > 0, fic102.out));
   plant.onPost(() => {
     if (process.overflow && !overflowLogged) {
       overflowLogged = true;
@@ -193,10 +225,14 @@ export function buildTank101(init: InitState, seed = 42): Tank101 {
     reg(p.tag, `${p.tag}/PID1/SP.CV`, 'SP', p.eu, p.lo, p.hi, () => p.sp);
     reg(p.tag, `${p.tag}/PID1/OUT.CV`, 'OUT', '%', 0, 100, () => p.out);
   }
+  reg('PDI-101', 'PDI-101/AI1/OUT.CV', 'PV', 'bar', 0, 1, () => pdi101.pv);
+  reg('PI-101', 'PI-101/AI1/OUT.CV', 'PV', 'bara', 0, 5, () => pi101.pv);
+  reg('PI-102', 'PI-102/AI1/OUT.CV', 'PV', 'bara', 0, 10, () => pi102.pv);
+  reg('II-102', 'II-102/AI1/OUT.CV', 'PV', 'A', 0, 20, () => ii102.pv);
   reg('XV-101', 'XV-101/DC1/PV_D.CV', 'PV', '', 0, 1, () => xv101.position);
   reg('MTR-102', 'MTR-102/DC1/PV_D.CV', 'PV', '', 0, 1, () => mtr102.position);
 
   // eerste sample zodat trends meteen iets tonen
   plant.historian.sample(plant.clock.now());
-  return { plant, process, li101, ft102, xv101, mtr102, lic101, fic102, em };
+  return { plant, process, li101, ft102, pi101, pi102, pdi101, ii102, xv101, mtr102, lic101, fic102, em };
 }

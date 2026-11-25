@@ -37,12 +37,6 @@ html, body, #app {
 .pid-svg .tank-fill { fill: #1d4ed8; }
 .pid-svg .vessel-title { font-size: 15px; font-weight: 700; fill: #1e293b; }
 .pid-svg .vessel-sub { font-size: 12px; font-weight: 600; fill: #334155; }
-.hydr-hud {
-  position: absolute; left: 20px; bottom: 12px;
-  background: rgba(241, 245, 249, 0.9); border: 1px solid #94a3b8;
-  padding: 4px 10px; border-radius: 4px; font-family: monospace; font-size: 12px;
-}
-
 /* High Performance GEMs */
 .gem {
   position: absolute; background: #e2e8f0; border: 1.5px solid #64748b;
@@ -213,3 +207,16 @@ th { background: #cbd5e1; position: sticky; top: 0; }
 .toast.hide { opacity: 0; }
 .penbar { display: flex; flex-wrap: wrap; gap: 4px; }
 .trend-canvas { width: 100%; display: block; }
+/* ---- scenario-venster ---- */
+.scn { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.scn-card { border: 1px solid #b8c2cc; border-radius: 6px; padding: 8px 10px; background: #f4f7fa; display: flex; flex-direction: column; gap: 6px; }
+.scn-title { font-weight: 700; display: flex; justify-content: space-between; }
+.scn-lvl { font-weight: 500; font-size: 11px; text-transform: uppercase; color: #5a6672; }
+.scn-brief, .scn-note { color: #2a3440; line-height: 1.4; }
+.scn-note { background: #fff8e1; border: 1px solid #e6d28a; padding: 6px 8px; border-radius: 4px; }
+.scn-meta { color: #5a6672; }
+.scn-actions { margin: 0; padding-left: 4px; list-style: none; }
+.scn-actions li.done { color: #1d7a3a; }
+.scn-score { font-size: 28px; font-weight: 800; color: #1c4fd6; }
+.scn-debrief { white-space: pre-wrap; background: #f4f7fa; border: 1px solid #b8c2cc; border-radius: 4px; padding: 8px; font: 12px/1.45 inherit; margin: 0; max-height: 260px; overflow: auto; }
+.scn-btns { display: flex; gap: 8px; }

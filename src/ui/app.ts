@@ -1,14 +1,18 @@
+import { CREDENTIALS } from '../config';
+import { ScenarioEngine } from '../scenarios/engine';
 import { buildTank101, type InitState, type Tank101 } from '../scenarios/tank101';
-import { fmtTime } from '../sim/clock';
+import { fmtTime } from '../dcs/clock';
 import { AlarmBanner, buildAlarmHelp, buildAlarmList, buildAreaFilter, buildDiagnostics, buildUnitFaceplate } from './alarmUi';
 import { clear, fmt, h, makeStage, s, showMenu, toast } from './dom';
 import { buildFaceplate, buildMotorDetail } from './faceplates';
 import { aiGem, controlValveGem, emGem, motorGem, pidGem, valveGem, type Gem } from './gems';
 import { Horn } from './horn';
+import { buildScenarioPanel } from './scenarioPanel';
+import { SCENARIOS } from '../scenarios/library';
 import { buildPhv } from './trend';
 import { WindowManager } from './wm';
 
-export type Role = 'OPERATOR' | 'SUPERVISOR';
+export type Role = 'OPERATOR' | 'SUPERVISOR' | 'INSTRUCTOR';
 export type Privilege = 'shelve' | 'areafilter' | 'helpedit' | 'bypass';
 
 export class App {
@@ -17,6 +21,7 @@ export class App {
   role: Role = 'OPERATOR';
   speed = 1;
   paused = false;
+  scenario: ScenarioEngine | null = null;
   readonly flags = new Set<string>();
   readonly directAccess = { help: false, faceplate: true, primary: true };
 
@@ -30,9 +35,9 @@ export class App {
   private rollupEl!: HTMLElement;
   private tankFillEl!: SVGElement;
   private tankValEl!: SVGElement;
-  private pressureReadoutEl!: HTMLElement;
   private watchBody!: HTMLElement;
   private instructorDrawer!: HTMLElement;
+  private instructorBtn?: HTMLElement;
   private timer: number | null = null;
 
   constructor(container: HTMLElement) {
@@ -44,16 +49,79 @@ export class App {
   get plant() { return this.t.plant; }
   get alarms() { return this.t.plant.alarms; }
 
-  can(p: Privilege): boolean {
-    if (this.role === 'SUPERVISOR') return true;
-    return p === 'helpedit' ? false : false;
+  /** Supervisor en instructeur hebben de extra privileges (shelving, bypass, area filtering, help bewerken). */
+  can(_p: Privilege): boolean {
+    return this.role !== 'OPERATOR';
+  }
+
+  get isInstructor(): boolean {
+    return this.role === 'INSTRUCTOR';
+  }
+
+  /** Instructeursactie in het Event Journal vastleggen (zoals elke andere gebruikersactie). */
+  logInstructor(param: string, value: string | number | boolean): void {
+    this.plant.journal.add({
+      type: 'CHANGE',
+      category: 'INSTRUCTOR',
+      area: this.plant.ctx.area,
+      node: this.plant.ctx.node,
+      unit: 'TANK101',
+      module: 'INSTRUCTOR',
+      moduleDesc: 'Instructor station',
+      parameter: param,
+      state: String(value),
+      desc1: this.role,
+    });
+  }
+
+  private setRole(role: Role): boolean {
+    if (role !== 'OPERATOR') {
+      const pw = window.prompt(`DeltaV logon – password for ${role}:`);
+      if (pw !== CREDENTIALS[role]) {
+        toast('Logon failed', 'error');
+        return false;
+      }
+    }
+    const old = this.role;
+    this.role = role;
+    this.plant.user = role;
+    this.plant.journal.add({ type: 'EVENT', category: 'USER', area: this.plant.ctx.area, node: this.plant.ctx.node, module: 'LOGON', moduleDesc: 'User logon', parameter: 'ROLE', state: role, desc1: role, desc2: `was ${old}` });
+    this.instructorBtn?.classList.toggle('hidden', !this.isInstructor);
+    if (!this.isInstructor) this.instructorDrawer?.classList.remove('open');
+    toast(`Logged on as ${role}`);
+    return true;
   }
 
   flag(name: string): void {
     this.flags.add(name);
   }
 
+  /** Training-scenario (tijdlijn, verwachte acties, score) starten. */
+  startScenario(id: string): void {
+    const def = SCENARIOS.find((d) => d.id === id);
+    if (!def) return;
+    this.wm.closeAll();
+    this.flags.clear();
+    this.scenario = new ScenarioEngine(def);
+    this.t = this.scenario.t;
+    this.plant.user = this.role;
+    this.renderShell();
+    this.refresh();
+    this.openScenarioPanel();
+  }
+
+  stopScenario(): void {
+    this.wm.close('scenario');
+    this.scenario = null;
+    this.loadScenario('RUNNING');
+  }
+
+  openScenarioPanel(): void {
+    this.wm.open({ key: 'scenario', title: 'Training scenario', view: buildScenarioPanel(this), w: 520 });
+  }
+
   loadScenario(init: InitState): void {
+    this.scenario = null;
     this.wm.closeAll();
     this.flags.clear();
     this.t = buildTank101(init);
@@ -72,13 +140,12 @@ export class App {
       {
         class: 'nav-sel',
         onchange: () => {
-          this.role = roleSel.value as Role;
-          this.plant.user = this.role;
-          toast(`Switched role to ${this.role}`);
+          if (!this.setRole(roleSel.value as Role)) roleSel.value = this.role;
         },
       },
       h('option', { value: 'OPERATOR', selected: this.role === 'OPERATOR' }, 'Role: OPERATOR'),
       h('option', { value: 'SUPERVISOR', selected: this.role === 'SUPERVISOR' }, 'Role: SUPERVISOR'),
+      h('option', { value: 'INSTRUCTOR', selected: this.role === 'INSTRUCTOR' }, 'Role: INSTRUCTOR'),
     );
 
     const speedSel = h(
@@ -121,16 +188,17 @@ export class App {
         h('button', { class: 'tbtn', onclick: () => this.openUnit('TANK101') }, 'Unit Alarms'),
         h('button', { class: 'tbtn', onclick: () => this.openPhv() }, 'History / Journal'),
         h('button', { class: 'tbtn', onclick: () => this.openFaceplate('EM_T101') }, 'EM_T101'),
+        h('button', { class: 'tbtn', onclick: () => this.openScenarioPanel() }, 'Scenarios'),
       ),
       h(
         'div',
         { class: 'nav-right' },
         h('button', { class: 'tbtn', onclick: () => this.loadScenario('RUNNING') }, 'Reset: Running'),
         h('button', { class: 'tbtn', onclick: () => this.loadScenario('COLD') }, 'Reset: Cold Start'),
-        h('button', {
-          class: 'tbtn primary',
+        (this.instructorBtn = h('button', {
+          class: 'tbtn primary' + (this.isInstructor ? '' : ' hidden'),
           onclick: () => this.instructorDrawer.classList.toggle('open'),
-        }, '⚙ Instructor / Faults'),
+        }, '⚙ Instructor / Faults')),
         roleSel,
         speedSel,
         pauseBtn,
@@ -162,6 +230,9 @@ export class App {
       s('path', { d: 'M 230 390 L 230 455 L 1080 455', class: 'pipe' }),
       s('polygon', { points: '1072,449 1084,455 1072,461', class: 'pipe-arrow' }),
       s('text', { x: 1095, y: 460, class: 'vessel-sub' }, 'To TANK201'),
+      s('rect', { x: 268, y: 441, width: 34, height: 28, rx: 3, class: 'vessel' }),
+      s('path', { d: 'M 272 445 L 298 465 M 272 465 L 298 445', class: 'sigline' }),
+      s('text', { x: 285, y: 436, 'text-anchor': 'middle', class: 'vessel-sub' }, 'F-101'),
       // Impulslijnen (stippellijn)
       s('path', { d: 'M 315 190 L 365 190', class: 'sigline' }),
       s('path', { d: 'M 491 190 L 535 190', class: 'sigline' }),
@@ -171,8 +242,6 @@ export class App {
     );
     stage.append(svg);
 
-    this.pressureReadoutEl = h('div', { class: 'hydr-hud' });
-    stage.append(this.pressureReadoutEl);
 
     // Plaats alle DeltaV High-Performance GEMs op het schema
     const addGem = (g: Gem) => {
@@ -182,8 +251,12 @@ export class App {
     addGem(aiGem(this, 'LI-101', 365, 160));
     addGem(pidGem(this, 'LIC-101', 535, 140));
     addGem(emGem(this, 'EM_T101', 890, 60));
-    addGem(valveGem(this, 'XV-101', 370, 415));
-    addGem(motorGem(this, 'MTR-102', 560, 410));
+    addGem(motorGem(this, 'MTR-102', 370, 410));
+    addGem(valveGem(this, 'XV-101', 560, 415));
+    addGem(aiGem(this, 'PDI-101', 215, 502));
+    addGem(aiGem(this, 'PI-101', 345, 502));
+    addGem(aiGem(this, 'PI-102', 475, 502));
+    addGem(aiGem(this, 'II-102', 605, 502));
     addGem(aiGem(this, 'FT-102', 745, 365));
     addGem(pidGem(this, 'FIC-102', 890, 265));
     addGem(controlValveGem(this, 'FIC-102', 892, 415));
@@ -257,12 +330,13 @@ export class App {
           set(v);
           valLbl.textContent = `${v}${unit}`;
         },
+        onchange: () => this.logInstructor(label, `${inp.value}${unit}`),
       });
       return h('div', { class: 'inst-row' }, h('div', { class: 'kv' }, h('span', { class: 'k' }, label), valLbl), inp);
     };
 
     const chk = (label: string, get: () => boolean, set: (v: boolean) => void) => {
-      const cb = h('input', { type: 'checkbox', checked: get(), onchange: () => set(cb.checked) });
+      const cb = h('input', { type: 'checkbox', checked: get(), onchange: () => { set(cb.checked); this.logInstructor(label, cb.checked ? 'ON' : 'OFF'); } });
       return h('label', { class: 'inst-chk' }, cb, ' ', label);
     };
 
@@ -270,7 +344,7 @@ export class App {
       const ai = this.plant.ai(tag);
       const sel = h(
         'select',
-        { onchange: () => ai.setFault(sel.value as 'NONE' | 'BAD' | 'FROZEN' | 'DRIFT') },
+        { onchange: () => { ai.setFault(sel.value as 'NONE' | 'BAD' | 'FROZEN' | 'DRIFT'); this.logInstructor(`${tag} transmitter fault`, sel.value); } },
         ...(['NONE', 'BAD', 'FROZEN', 'DRIFT'] as const).map((f) => h('option', { value: f, selected: ai.fault === f }, f)),
       );
       return h('div', { class: 'kv' }, h('span', { class: 'k' }, `${tag} Transmitter Fault`), sel);
@@ -279,13 +353,14 @@ export class App {
     return h(
       'aside',
       { class: 'inst-drawer' },
-      h('div', { class: 'watch-head' }, 'INSTRUCTOR STATION (K-Spice Malfunctions)'),
+      h('div', { class: 'watch-head' }, 'INSTRUCTOR STATION – malfunctions'),
       h(
         'div',
         { class: 'inst-body' },
         slider('Feed Flow to Tank101', 0, 100, 1, () => p.feedFlow, (v) => (p.feedFlow = v), ' GPM'),
         slider('Suction Filter Plugging', 0, 1, 0.05, () => p.filterPlugging, (v) => (p.filterPlugging = v)),
         slider('Pump MTR-102 Plugging', 0, 1, 0.05, () => p.pumpPlugging, (v) => (p.pumpPlugging = v)),
+        slider('Pump MTR-102 Wear (speed factor)', 0.3, 1, 0.05, () => p.pumpWear, (v) => (p.pumpWear = v)),
         slider('Pump Gas / Cavitation', 0.2, 1, 0.05, () => p.gasDegradation, (v) => (p.gasDegradation = v)),
         slider('FCV-102 Internal Leak', 0, 0.5, 0.02, () => p.fcvLeak, (v) => (p.fcvLeak = v)),
         chk('FCV-102 Air Supply Failure (Fail Closed)', () => p.fcvAirFail, (v) => (p.fcvAirFail = v)),
@@ -385,13 +460,6 @@ export class App {
     this.tankFillEl.setAttribute('y', String(365 - hPx));
     this.tankFillEl.setAttribute('height', String(hPx));
     this.tankValEl.textContent = `${fmt(this.t.process.level, 1)} gal`;
-
-    // Hydraulische K-Spice telemetrie onderaan het scherm
-    const p = this.t.process;
-    this.pressureReadoutEl.textContent =
-      `Feed: ${fmt(p.feedFlow, 1)} GPM | Filter ΔP: ${fmt(p.filterDpBar, 2)} bar | ` +
-      `P_suct: ${fmt(p.suctionPressure, 2)} bara | P_disch: ${fmt(p.dischargePressure, 2)} bara | ` +
-      `Pump: ${fmt(p.pumpSpeedFrac * 100, 0)}% (${fmt(p.pumpPowerKw, 1)} kW)`;
 
     // Watch Area waarden
     for (const tag of this.watchTags) {

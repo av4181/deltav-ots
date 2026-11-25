@@ -1,4 +1,4 @@
-import { fmtTime } from '../sim/clock';
+import { fmtTime } from '../dcs/clock';
 import type { App } from './app';
 import { clear, fmt, h } from './dom';
 import type { View } from './wm';

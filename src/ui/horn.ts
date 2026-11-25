@@ -1,4 +1,4 @@
-import type { Priority } from '../sim/types';
+import type { Priority } from '../dcs/types';
 
 /** Akoestische alarmhoorn via Web Audio. Patroon hangt af van de hoogste prioriteit. */
 export class Horn {

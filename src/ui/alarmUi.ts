@@ -1,7 +1,7 @@
-import { fmtDateTime, fmtTime } from '../sim/clock';
+import { fmtDateTime, fmtTime } from '../dcs/clock';
 import { getHelp, saveHelp, type AlarmHelp } from '../scenarios/alarmHelp';
-import { rankCompare, type BannerItem } from '../sim/alarms';
-import type { AlarmState, AlarmType, Priority } from '../sim/types';
+import { rankCompare, type BannerItem } from '../dcs/alarms';
+import type { AlarmState, AlarmType, Priority } from '../dcs/types';
 import type { App } from './app';
 import { clear, h, showMenu, toast, type Child } from './dom';
 import type { View } from './wm';

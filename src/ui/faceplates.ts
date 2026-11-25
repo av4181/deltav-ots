@@ -1,8 +1,8 @@
-import type { AnalogInput } from '../sim/ai';
-import type { DiscreteDevice } from '../sim/discrete';
-import type { EquipmentModule } from '../sim/em';
-import type { Pid } from '../sim/pid';
-import type { Mode } from '../sim/types';
+import type { AnalogInput } from '../dcs/ai';
+import type { DiscreteDevice } from '../dcs/discrete';
+import type { EquipmentModule } from '../dcs/em';
+import type { Pid } from '../dcs/pid';
+import type { Mode } from '../dcs/types';
 import { AlarmTable } from './alarmUi';
 import type { App } from './app';
 import { NumField, clear, fmt, h, toast, type Child } from './dom';

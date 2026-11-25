@@ -68,7 +68,8 @@ export class AnalogInput implements SimModule {
         break;
       default:
         this.status = 'GOOD';
-        this.pv = this.filt + noise + (this.fault === 'DRIFT' ? this.drift : 0);
+        // een transmitter meet nooit onder 0 % van het bereik (4 mA) en verzadigt iets boven 100 %
+        this.pv = Math.min(Math.max(this.filt + noise + (this.fault === 'DRIFT' ? this.drift : 0), this.lo), this.hi + 0.05 * (this.hi - this.lo));
     }
     this.limits.evaluate(this.pv, this.status === 'GOOD');
     this.ctx.alarms.set(this.badDef, this.status === 'BAD', 'Input status BAD', null);
