@@ -7,24 +7,6 @@ html, body, #app {
 }
 #app { display: flex; flex-direction: column; }
 
-/* Topbar */
-.topbar {
-  height: 38px; background: #263238; color: #f1f5f9;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 0 10px; border-bottom: 1px solid #0f172a; gap: 8px;
-}
-.nav-left, .nav-right { display: flex; align-items: center; gap: 6px; }
-.brand { font-weight: 700; letter-spacing: 0.4px; margin-right: 8px; color: #93c5fd; }
-.nav-clock { font-family: monospace; font-size: 13px; padding: 2px 6px; background: #0f172a; border-radius: 3px; }
-.nav-sel { background: #334155; color: #fff; border: 1px solid #475569; border-radius: 3px; padding: 2px 6px; font-size: 12px; }
-.rollup-tab {
-  padding: 4px 12px; border: 1px solid #64748b; background: #475569; color: #fff;
-  font-weight: 600; border-radius: 3px; cursor: pointer;
-}
-.rollup-tab.active { background: #cbd5e1; color: #0f172a; }
-.rollup-tab.p-critical { background: #dc2626; color: #fff; }
-.rollup-tab.p-warning { background: #facc15; color: #0f172a; }
-
 /* Workspace & Stage */
 .workspace { position: relative; flex: 1; overflow: hidden; background: #d5dce4; }
 .stage-outer { width: 100%; height: 100%; position: relative; overflow: hidden; }
@@ -37,33 +19,6 @@ html, body, #app {
 .pid-svg .tank-fill { fill: #1d4ed8; }
 .pid-svg .vessel-title { font-size: 15px; font-weight: 700; fill: #1e293b; }
 .pid-svg .vessel-sub { font-size: 12px; font-weight: 600; fill: #334155; }
-/* High Performance GEMs */
-.gem {
-  position: absolute; background: #e2e8f0; border: 1.5px solid #64748b;
-  border-radius: 4px; padding: 4px 6px; cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-}
-.gem:hover { border-color: #0284c7; background: #f1f5f9; }
-.gem.bad { border-color: #dc2626; background: #fee2e2; }
-.gtag { font-weight: 700; font-size: 11px; color: #0f172a; }
-.gval { font-weight: 700; font-size: 15px; color: #1d4ed8; }
-.geu { font-size: 11px; color: #475569; }
-.gstate { font-size: 11px; text-align: center; color: #334155; margin-top: 1px; }
-.gtopline { display: flex; justify-content: space-between; align-items: center; }
-.gmode { font-size: 11px; font-weight: 700; padding: 0 4px; background: #cbd5e1; border-radius: 2px; }
-.gmode.abn { background: #2563eb; color: #fff; }
-.grid3 { display: grid; grid-template-columns: auto 1fr; gap: 1px 6px; font-size: 11px; margin-top: 2px; }
-.gbar { position: relative; height: 6px; background: #cbd5e1; margin-top: 4px; border-radius: 2px; }
-.gbarfill { height: 100%; background: #0d9488; }
-.gbarsp { position: absolute; top: -2px; width: 2px; height: 10px; background: #0f172a; }
-
-.vshape, .mshape { fill: #94a3b8; stroke: #334155; stroke-width: 2; }
-.vshape.on, .mshape.on { fill: #e2e8f0; stroke: #0f172a; }
-.vshape.abn { stroke-width: 3.5; stroke: #0284c7; }
-.mtri { fill: #475569; }
-.mtri.on { fill: #16a34a; }
-.actuator { fill: #cbd5e1; stroke: #334155; stroke-width: 2; }
-
 .abadge {
   position: absolute; top: -8px; left: -8px; width: 18px; height: 18px;
   border-radius: 3px; display: flex; align-items: center; justify-content: center;
@@ -170,26 +125,6 @@ th { background: #cbd5e1; position: sticky; top: 0; }
 .arow.sel { outline: 2px solid #0f172a; }
 .okc { background: #dcfce7; color: #166534; font-weight: 700; }
 .badc { background: #fee2e2; color: #991b1b; font-weight: 700; }
-
-/* Bottom Alarm Banner */
-.banner {
-  height: 44px; background: #cbd5e1; border-top: 2px solid #64748b;
-  display: flex; align-items: center; justify-content: space-between; padding: 0 8px; gap: 8px;
-}
-.bleft, .bright, .tgls { display: flex; align-items: center; gap: 4px; }
-.slots { flex: 1; display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
-.slot {
-  height: 30px; border: 1px solid #94a3b8; background: #e2e8f0; border-radius: 3px;
-  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; cursor: pointer;
-}
-.slot.empty { cursor: default; opacity: 0.5; }
-.nodebox { padding: 4px 8px; border: 1px solid #64748b; background: #e2e8f0; font-weight: 700; border-radius: 3px; cursor: pointer; }
-.comms { display: flex; flex-direction: column; gap: 3px; }
-.comm { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; }
-.comm.ok { background: #16a34a; }
-.comm.bad { background: #dc2626; }
-.flash { animation: blink 0.8s infinite alternate; }
-@keyframes blink { from { opacity: 1; } to { opacity: 0.45; } }
 
 /* Context Menu & Toasts */
 .ctxmenu {

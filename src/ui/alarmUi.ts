@@ -145,52 +145,85 @@ export class AlarmTable implements View {
 }
 
 // ---------------------------------------------------------------- banner
+const SLOTS = 5;
+const SVG_ACK = '<svg viewBox="0 0 32 24" width="30" height="22"><path d="M5 12 L13 19 L27 4" fill="none" stroke="#006400" stroke-width="3.5"/></svg>';
+const SVG_SIL = '<svg viewBox="0 0 32 24" width="30" height="22"><path d="M4 9 H9 L16 3 V21 L9 15 H4 Z" fill="#444"/><path d="M20 8 L28 16 M28 8 L20 16" stroke="#b00000" stroke-width="2.5"/></svg>';
+const SVG_LIST = '<svg viewBox="0 0 32 24" width="30" height="22"><path d="M4 5 H28 M4 12 H28 M4 19 H28" stroke="#222" stroke-width="3"/><circle cx="26" cy="19" r="4" fill="#d00000"/></svg>';
+
+/** Onderste deel van het DeltaV-scherm: alarmbanner (5 cellen met i-knop), infolijn van het geselecteerde alarm en statusbalk. */
 export class AlarmBanner implements View {
   readonly el: HTMLElement;
-  private slots: HTMLElement[] = [];
+  private cells: { box: HTMLElement; text: HTMLElement; info: HTMLElement }[] = [];
   private items: (BannerItem | null)[] = [];
+  private selected = 0;
   private ackBtn: HTMLButtonElement;
   private silenceBtn: HTMLButtonElement;
   private hornBtn: HTMLButtonElement;
-  private flagsEl: HTMLElement;
+  private info: Record<'time' | 'desc' | 'tag' | 'type' | 'level' | 'more', HTMLElement>;
   private nodeBox: HTMLElement;
   private commA: HTMLElement;
   private commB: HTMLElement;
-  private more: HTMLElement;
+  private flagsEl: HTMLElement;
   private toggles: Record<'help' | 'faceplate' | 'primary', HTMLButtonElement>;
 
   constructor(private app: App) {
-    this.ackBtn = h('button', { class: 'bbtn', title: 'Acknowledge All Alarms', onclick: () => { app.alarms.ackAllVisible(); app.flag('acked'); } }, 'ACK ALL');
-    this.silenceBtn = h('button', { class: 'bbtn', title: 'Silence Horn', onclick: () => { app.alarms.hornSilenced = true; app.flag('horn-silenced'); } }, 'SILENCE');
-    this.hornBtn = h('button', { class: 'bbtn', title: 'Enable / Disable Horn', onclick: () => { app.alarms.hornEnabled = !app.alarms.hornEnabled; } }, 'HORN ON');
-    this.flagsEl = h('span', { class: 'bflags', title: 'Alarms suppressed / areas filtered' });
+    const icon = (svg: string, title: string, onclick: () => void) => {
+      const b = h('button', { class: 'dv-btn bicon', title, onclick });
+      b.innerHTML = svg;
+      return b;
+    };
+    this.ackBtn = icon(SVG_ACK, 'Acknowledge All Alarms', () => { app.alarms.ackAllVisible(); app.flag('acked'); });
+    this.silenceBtn = icon(SVG_SIL, 'Silence Horn', () => { app.alarms.hornSilenced = true; app.flag('horn-silenced'); });
+    const listBtn = icon(SVG_LIST, 'Alarm List Summary', () => app.openAlarmList());
+    this.hornBtn = h('button', { class: 'dv-btn mini', title: 'Enable / Disable Horn', onclick: () => { app.alarms.hornEnabled = !app.alarms.hornEnabled; } }, 'HORN');
     const mk = (k: 'help' | 'faceplate' | 'primary', label: string, title: string) =>
-      h('button', { class: 'bbtn tgl', title, onclick: () => { app.directAccess[k] = !app.directAccess[k]; } }, label);
+      h('button', { class: 'dv-btn mini tgl', title, onclick: () => { app.directAccess[k] = !app.directAccess[k]; } }, label);
     this.toggles = {
       help: mk('help', 'Help', 'Alarm direct access to Alarm Help'),
       faceplate: mk('faceplate', 'Face', 'Alarm direct access to the Faceplate'),
       primary: mk('primary', 'Prim', 'Alarm direct access to the Primary Control display'),
     };
-    for (let i = 0; i < 8; i++) {
-      const slot = h('div', { class: 'slot empty' });
-      slot.addEventListener('click', () => this.click(i));
-      slot.addEventListener('contextmenu', (e) => {
+    for (let i = 0; i < SLOTS; i++) {
+      const text = h('div', { class: 'bcell-text' });
+      const info = h('button', { class: 'bcell-i', title: 'Alarm Help' }, 'i');
+      const box = h('div', { class: 'bcell empty' }, text, info);
+      text.addEventListener('click', () => { this.selected = i; this.click(i); });
+      text.addEventListener('mouseenter', () => { this.selected = i; });
+      text.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const it = this.items[i];
         if (it && !it.isUnit) app.openAlarmHelp(it.top.id);
       });
-      this.slots.push(slot);
+      info.addEventListener('click', () => {
+        const it = this.items[i];
+        if (it && !it.isUnit) app.openAlarmHelp(it.top.id);
+      });
+      this.cells.push({ box, text, info });
     }
-    this.more = h('div', { class: 'more', title: 'More alarms – open Alarm List', onclick: () => app.openAlarmList() });
+    this.info = {
+      time: h('div', { class: 'icell w-time' }),
+      desc: h('div', { class: 'icell w-desc' }),
+      tag: h('div', { class: 'icell w-tag' }),
+      type: h('div', { class: 'icell w-type' }),
+      level: h('div', { class: 'icell w-level' }),
+      more: h('div', { class: 'icell w-more', title: 'More alarms – open Alarm List', onclick: () => app.openAlarmList() }),
+    };
+    this.flagsEl = h('span', { class: 'bflags', title: 'Alarms suppressed / areas filtered' });
     this.commA = h('span', { class: 'comm' });
     this.commB = h('span', { class: 'comm' });
-    this.nodeBox = h('div', { class: 'nodebox', title: 'Hardware Node Status', onclick: () => app.openDiagnostics() }, 'CTLR1');
-    this.el = h('div', { class: 'banner' },
-      h('div', { class: 'bleft' }, this.ackBtn, this.silenceBtn, this.hornBtn, this.flagsEl,
-        h('div', { class: 'tgls' }, this.toggles.help, this.toggles.faceplate, this.toggles.primary)),
-      h('div', { class: 'slots' }, ...this.slots, this.more),
-      h('div', { class: 'bright' }, this.nodeBox, h('div', { class: 'comms' }, this.commA, this.commB),
-        h('button', { class: 'bbtn', onclick: () => app.openAlarmList(), title: 'Alarm List' }, 'ALARM LIST')),
+    this.nodeBox = h('div', { class: 'nodebox', title: 'Hardware Node Status (click: diagnostics)', onclick: () => app.openDiagnostics() }, 'CTLR1');
+    this.el = h('div', { class: 'dv-bottom' },
+      h('div', { class: 'dv-banner' },
+        h('div', { class: 'bcells' }, ...this.cells.map((c) => c.box)),
+        h('div', { class: 'bicons' }, this.ackBtn, this.silenceBtn, listBtn)),
+      h('div', { class: 'dv-info' },
+        this.info.time, this.info.desc, this.info.tag, this.info.type, this.info.level, this.info.more,
+        h('div', { class: 'itools' }, this.flagsEl, this.hornBtn, this.toggles.help, this.toggles.faceplate, this.toggles.primary)),
+      h('div', { class: 'dv-status' },
+        h('div', { class: 'srun' }, 'Run'),
+        h('div', { class: 'sspace' }),
+        this.nodeBox, h('div', { class: 'comms' }, this.commA, this.commB),
+        h('div', { class: 'snum' }, 'NUM')),
     );
   }
 
@@ -208,35 +241,47 @@ export class AlarmBanner implements View {
   refresh(): void {
     const al = this.app.alarms;
     const items = al.bannerItems();
-    this.items = items.slice(0, 8);
-    for (let i = 0; i < 8; i++) {
+    this.items = items.slice(0, SLOTS);
+    for (let i = 0; i < SLOTS; i++) {
       const it = items[i];
-      const slot = this.slots[i];
+      const c = this.cells[i];
       if (!it) {
-        slot.className = 'slot empty';
-        slot.textContent = '';
-        slot.title = '';
+        c.box.className = 'bcell empty';
+        c.text.textContent = '';
+        c.text.title = '';
         continue;
       }
       const a = it.top;
-      slot.className = `slot ${pClass(a.def.priority)}${a.active ? '' : ' inactive'}${a.acked ? '' : ' unack'}`;
-      const txt = (it.isUnit ? '' : ICON[a.def.priority] + ' ') + it.label;
-      if (slot.textContent !== txt) slot.textContent = txt;
-      slot.title = it.isUnit
+      c.box.className = `bcell ${pClass(a.def.priority)}${a.active ? '' : ' inactive'}${a.acked ? ' acked' : ' unack'}`;
+      const txt = it.isUnit ? `${it.label} (${it.count})` : it.label;
+      if (c.text.textContent !== txt) c.text.textContent = txt;
+      c.text.title = it.isUnit
         ? `${it.label}: ${it.count} alarm(s) – highest ${a.def.module} ${a.def.param}`
-        : `${a.def.module} ${a.def.param}\n${a.message}\nTime in ${fmtTime(a.timeIn)}\n(right-click: Alarm Help)`;
+        : `${a.def.module} ${a.def.param}\n${a.message}\nTime in ${fmtTime(a.timeIn)}`;
     }
-    this.more.textContent = items.length > 8 ? `+${items.length - 8}` : '';
-    this.hornBtn.textContent = al.hornEnabled ? 'HORN ON' : 'HORN OFF';
+    // infolijn: geselecteerd (muis) of hoogste alarm
+    const it = this.items[this.selected] ?? this.items[0] ?? null;
+    if (it) {
+      const a = it.top;
+      this.info.time.textContent = fmtDateTime(a.timeIn);
+      this.info.desc.textContent = it.isUnit ? `Unit ${it.label}` : a.def.description;
+      this.info.tag.textContent = it.isUnit ? `${it.count} alarms` : `${a.def.module}/${a.def.param}`;
+      this.info.type.textContent = it.isUnit ? '' : a.message;
+      this.info.level.textContent = a.def.priority;
+      this.info.level.className = `icell w-level ${pClass(a.def.priority)}`;
+    } else {
+      for (const k of ['time', 'desc', 'tag', 'type', 'level'] as const) this.info[k].textContent = '';
+      this.info.level.className = 'icell w-level';
+    }
+    this.info.more.textContent = items.length > SLOTS ? `+${items.length - SLOTS}` : '';
     this.hornBtn.classList.toggle('off', !al.hornEnabled);
+    this.hornBtn.textContent = al.hornEnabled ? 'HORN' : 'HORN OFF';
     const hs = al.hornState();
     this.silenceBtn.classList.toggle('flash', hs.sounding);
     this.ackBtn.classList.toggle('flash', items.some((x) => !x.top.acked));
     for (const k of ['help', 'faceplate', 'primary'] as const) this.toggles[k].classList.toggle('on', this.app.directAccess[k]);
     const sup = al.suppressedActive();
-    const areas = al.disabledAreas.size;
-    this.flagsEl.textContent = (areas ? '⛔ ' : '') + (sup ? '⏸ ' : '');
-    // node
+    this.flagsEl.textContent = (al.disabledAreas.size ? '⛔ ' : '') + (sup ? '⏸ ' : '');
     const hw = al.hardwareTop();
     const node = hw ? this.app.plant.nodes.find((n) => n.name === hw.def.node) : this.app.plant.nodes[0];
     if (node) {

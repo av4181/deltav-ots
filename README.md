@@ -42,3 +42,8 @@ HeatExchangerStream, Burner (WSGG-straling), FlashCalculator/thermo-pakket (PT/P
 ## Tests
 `tests/model.test.ts` controleert de modellen tegen de vergelijkingen uit de documenten; `tests/sim.test.ts` de DCS-laag;
 `tests/scenarios.test.ts` laat een goede en een passieve operator de scenario's doorlopen.
+
+## v0.3 – DeltaV Operate-look
+- Titelbalk met aparte OTS-strip, Module/Main/Username, toolbar, displaystrook (T / ESD / E.U / ◁ △ ▽ ▷), navigatieknoppen met alarmrollup, banner met infolijn en statusbalk.
+- Displays zijn modulair (`src/ui/displays.ts`, `DISPLAYS`); nieuwe schermen = nieuwe `DisplayDef`.
+- Stijl: `src/dv.css` (kleurconventie: klep dicht zwart, open groen; alarm rood/geel/magenta).

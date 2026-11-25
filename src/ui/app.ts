@@ -5,7 +5,8 @@ import { fmtTime } from '../dcs/clock';
 import { AlarmBanner, buildAlarmHelp, buildAlarmList, buildAreaFilter, buildDiagnostics, buildUnitFaceplate } from './alarmUi';
 import { clear, fmt, h, makeStage, s, showMenu, toast } from './dom';
 import { buildFaceplate, buildMotorDetail } from './faceplates';
-import { aiGem, controlValveGem, emGem, motorGem, pidGem, valveGem, type Gem } from './gems';
+import { DISPLAYS, type DisplayInstance } from './displays';
+import type { Gem } from './gems';
 import { Horn } from './horn';
 import { buildScenarioPanel } from './scenarioPanel';
 import { SCENARIOS } from '../scenarios/library';
@@ -33,11 +34,22 @@ export class App {
 
   private clockEl!: HTMLElement;
   private rollupEl!: HTMLElement;
-  private tankFillEl!: SVGElement;
-  private tankValEl!: SVGElement;
   private watchBody!: HTMLElement;
   private instructorDrawer!: HTMLElement;
   private instructorBtn?: HTMLElement;
+  private graphic: DisplayInstance | null = null;
+  private graphicHost!: HTMLElement;
+  private workspaceEl!: HTMLElement;
+  private watchBox!: HTMLElement;
+  private mainSel!: HTMLSelectElement;
+  private userEl!: HTMLElement;
+  private dvClockEl!: HTMLElement;
+  private stripTitleEl!: HTMLElement;
+  private stripRevEl!: HTMLElement;
+  private navBtns = new Map<string, HTMLElement>();
+  displayId = DISPLAYS[0].id;
+  private navHistory: string[] = [];
+  private navPos = 0;
   private timer: number | null = null;
 
   constructor(container: HTMLElement) {
@@ -133,137 +145,102 @@ export class App {
   private renderShell(): void {
     clear(this.root);
     this.gems = [];
+    this.graphic?.dispose?.();
+    this.graphic = null;
 
-    // ---- Top Navigatiebalk (DeltaV Live Header) ----
+    // ---- OTS-besturing (simulatorfuncties, niet onderdeel van DeltaV zelf) ----
     const roleSel = h(
       'select',
-      {
-        class: 'nav-sel',
-        onchange: () => {
-          if (!this.setRole(roleSel.value as Role)) roleSel.value = this.role;
-        },
-      },
-      h('option', { value: 'OPERATOR', selected: this.role === 'OPERATOR' }, 'Role: OPERATOR'),
-      h('option', { value: 'SUPERVISOR', selected: this.role === 'SUPERVISOR' }, 'Role: SUPERVISOR'),
-      h('option', { value: 'INSTRUCTOR', selected: this.role === 'INSTRUCTOR' }, 'Role: INSTRUCTOR'),
+      { class: 'ots-sel', title: 'Role', onchange: () => { if (!this.setRole(roleSel.value as Role)) roleSel.value = this.role; } },
+      ...(['OPERATOR', 'SUPERVISOR', 'INSTRUCTOR'] as const).map((r) => h('option', { value: r, selected: this.role === r }, r)),
     );
-
     const speedSel = h(
       'select',
-      {
-        class: 'nav-sel',
-        onchange: () => { this.speed = Number(speedSel.value); },
-      },
+      { class: 'ots-sel', title: 'Simulation speed', onchange: () => { this.speed = Number(speedSel.value); } },
       ...[1, 2, 5, 10].map((x) => h('option', { value: String(x), selected: this.speed === x }, `${x}x`)),
     );
-
-    const pauseBtn = h(
-      'button',
-      {
-        class: 'tbtn',
-        onclick: () => {
-          this.paused = !this.paused;
-          pauseBtn.textContent = this.paused ? '▶ Resume' : '⏸ Pause';
-        },
+    const pauseBtn = h('button', {
+      class: 'ots-btn',
+      onclick: () => {
+        this.paused = !this.paused;
+        pauseBtn.textContent = this.paused ? '▶ Resume' : '⏸ Pause';
       },
-      this.paused ? '▶ Resume' : '⏸ Pause',
+    }, this.paused ? '▶ Resume' : '⏸ Pause');
+    this.clockEl = h('span', { class: 'ots-clock', title: 'Simulation time' });
+    this.instructorBtn = h('button', {
+      class: 'ots-btn accent' + (this.isInstructor ? '' : ' hidden'),
+      onclick: () => this.instructorDrawer.classList.toggle('open'),
+    }, '⚙ Instructor');
+    const titleBar = h('div', { class: 'dv-title' },
+      h('span', { class: 'dv-logo' }, 'Δ'),
+      h('span', { class: 'dv-title-text' }, 'DeltaV Live – Operate (Run)'),
+      h('div', { class: 'ots-ctl' },
+        h('span', { class: 'ots-lbl' }, 'OTS'),
+        h('button', { class: 'ots-btn', onclick: () => this.loadScenario('RUNNING') }, 'Reset: Running'),
+        h('button', { class: 'ots-btn', onclick: () => this.loadScenario('COLD') }, 'Reset: Cold start'),
+        h('button', { class: 'ots-btn', onclick: () => this.openScenarioPanel() }, 'Scenarios'),
+        this.instructorBtn, roleSel, speedSel, pauseBtn, this.clockEl),
     );
 
-    this.rollupEl = h('button', {
-      class: 'rollup-tab active',
-      onclick: () => this.openUnit('TANK101'),
-      title: 'Click to open TANK101 Unit Faceplate',
-    });
+    // ---- Module / Main / Username / klok ----
+    const moduleSel = h(
+      'select',
+      { class: 'dv-combo', title: 'Module – selecteer om het faceplate te openen', onchange: () => { if (moduleSel.value) this.openFaceplate(moduleSel.value); moduleSel.selectedIndex = 0; } },
+      h('option', { value: '' }, this.plant.units[0]?.tag ?? 'TANK101'),
+      ...this.plant.units[0].modules.map((m) => h('option', { value: m }, m)),
+    );
+    this.mainSel = h(
+      'select',
+      { class: 'dv-combo wide', title: 'Main – huidig display', onchange: () => this.showDisplay(this.mainSel.value) },
+      ...DISPLAYS.map((d) => h('option', { value: d.id, selected: d.id === this.displayId }, d.id)),
+    );
+    this.userEl = h('div', { class: 'dv-field user' }, this.role);
+    this.dvClockEl = h('div', { class: 'dv-field clock' });
+    const row1 = h('div', { class: 'dv-row' },
+      h('span', { class: 'dv-lbl' }, 'Module'), moduleSel,
+      h('span', { class: 'dv-lbl main' }, 'Main'), this.mainSel,
+      h('span', { class: 'dv-lbl user' }, 'Username'), this.userEl,
+      this.dvClockEl);
 
-    this.clockEl = h('span', { class: 'nav-clock' });
-
-    const topBar = h(
-      'header',
-      { class: 'topbar' },
-      h(
-        'div',
-        { class: 'nav-left' },
-        h('span', { class: 'brand' }, 'DeltaV Live OTS'),
-        this.rollupEl,
-        h('button', { class: 'tbtn', onclick: () => this.openUnit('TANK101') }, 'Unit Alarms'),
-        h('button', { class: 'tbtn', onclick: () => this.openPhv() }, 'History / Journal'),
-        h('button', { class: 'tbtn', onclick: () => this.openFaceplate('EM_T101') }, 'EM_T101'),
-        h('button', { class: 'tbtn', onclick: () => this.openScenarioPanel() }, 'Scenarios'),
-      ),
-      h(
-        'div',
-        { class: 'nav-right' },
-        h('button', { class: 'tbtn', onclick: () => this.loadScenario('RUNNING') }, 'Reset: Running'),
-        h('button', { class: 'tbtn', onclick: () => this.loadScenario('COLD') }, 'Reset: Cold Start'),
-        (this.instructorBtn = h('button', {
-          class: 'tbtn primary' + (this.isInstructor ? '' : ' hidden'),
-          onclick: () => this.instructorDrawer.classList.toggle('open'),
-        }, '⚙ Instructor / Faults')),
-        roleSel,
-        speedSel,
-        pauseBtn,
-        this.clockEl,
-      ),
+    // ---- Toolbar ----
+    const tb = (glyph: string, title: string, onclick: () => void, extra = '') => h('button', { class: 'dv-btn tool ' + extra, title, onclick }, glyph);
+    const toolbar = h('div', { class: 'dv-toolbar' },
+      tb('◀', 'Previous display', () => this.navBack()),
+      tb('⎙', 'Print display (not available in the OTS)', () => toast('Printing is not available in the OTS')),
+      h('span', { class: 'tsep' }),
+      tb('▤', 'Alarm List Summary', () => this.openAlarmList()),
+      tb('⚑', 'Unit alarms – TANK101', () => this.openUnit('TANK101')),
+      tb('⛔', 'Area alarm filtering', () => this.openAreaFilter()),
+      h('span', { class: 'tsep' }),
+      tb('📈', 'Process History View', () => this.openPhv()),
+      tb('☰', 'Event Journal (History / Journal)', () => this.openPhv()),
+      tb('⚙', 'EM_T101 faceplate', () => this.openFaceplate('EM_T101')),
+      h('span', { class: 'tsep' }),
+      tb('🖧', 'DeltaV Diagnostics', () => this.openDiagnostics()),
+      tb('👁', 'Watch Area on/off', () => this.watchBox.classList.toggle('hidden')),
+      tb('?', 'Help', () => toast('Operator help: click a GEM for its faceplate, right-click for the menu.')),
     );
 
-    // ---- Process Graphic Canvas (TANK101) ----
-    const { outer, stage } = makeStage(1180, 560);
-
-    const svg = s('svg', { viewBox: '0 0 1180 560', width: 1180, height: 560, class: 'pid-svg' });
-    // Leidingen: Voeding -> Tank101 -> XV-101 -> MTR-102 -> FCV-102 -> Afvoer
-    svg.append(
-      s('path', { d: 'M 40 130 L 140 130', class: 'pipe' }),
-      s('polygon', { points: '132,124 144,130 132,136', class: 'pipe-arrow' }),
-      // Tank 101 romp
-      s('rect', { x: 145, y: 100, width: 170, height: 290, rx: 28, class: 'vessel' }),
-      s('text', { x: 230, y: 88, 'text-anchor': 'middle', class: 'vessel-title' }, 'TANK-101'),
+    // ---- Titelstrook ----
+    this.rollupEl = h('div', { class: 'dv-strip-id' });
+    this.stripTitleEl = h('div', { class: 'dv-strip-title' });
+    this.stripRevEl = h('div', { class: 'dv-strip-rev' });
+    const sbtn = (t: string, title: string, onclick?: () => void, off = false) => h('button', { class: 'dv-btn strip' + (off ? ' off' : ''), title, onclick: off ? undefined : onclick, disabled: off }, t);
+    const strip = h('div', { class: 'dv-strip' },
+      this.rollupEl, this.stripRevEl, this.stripTitleEl,
+      h('div', { class: 'dv-strip-btns' },
+        sbtn('T', 'Trend of this display', () => this.openPhv()),
+        sbtn('ESD', 'ESD – not configured for this display', undefined, true),
+        sbtn('E.U', 'Show / hide engineering units', () => this.workspaceEl.classList.toggle('no-eu')),
+        sbtn('◁', 'Back', () => this.navBack()),
+        sbtn('△', 'Top-level display', () => this.showDisplay(DISPLAYS[0].id)),
+        sbtn('▽', 'Next display', () => this.navNext()),
+        sbtn('▷', 'Forward', () => this.navForward())),
     );
 
-    // Kijkglas / niveau-indicatie in Tank101
-    this.tankFillEl = s('rect', { x: 215, y: 245, width: 30, height: 120, class: 'tank-fill' });
-    this.tankValEl = s('text', { x: 230, y: 382, 'text-anchor': 'middle', class: 'vessel-sub' }, '500.0 gal');
-    svg.append(
-      s('rect', { x: 215, y: 130, width: 30, height: 235, class: 'tank-glass' }),
-      this.tankFillEl,
-      this.tankValEl,
-      // Uitloopleiding
-      s('path', { d: 'M 230 390 L 230 455 L 1080 455', class: 'pipe' }),
-      s('polygon', { points: '1072,449 1084,455 1072,461', class: 'pipe-arrow' }),
-      s('text', { x: 1095, y: 460, class: 'vessel-sub' }, 'To TANK201'),
-      s('rect', { x: 268, y: 441, width: 34, height: 28, rx: 3, class: 'vessel' }),
-      s('path', { d: 'M 272 445 L 298 465 M 272 465 L 298 445', class: 'sigline' }),
-      s('text', { x: 285, y: 436, 'text-anchor': 'middle', class: 'vessel-sub' }, 'F-101'),
-      // Impulslijnen (stippellijn)
-      s('path', { d: 'M 315 190 L 365 190', class: 'sigline' }),
-      s('path', { d: 'M 491 190 L 535 190', class: 'sigline' }),
-      s('path', { d: 'M 617 240 L 617 300', class: 'sigline' }),
-      s('path', { d: 'M 940 365 L 940 420', class: 'sigline' }),
-      s('path', { d: 'M 865 365 L 865 415', class: 'sigline' }),
-    );
-    stage.append(svg);
-
-
-    // Plaats alle DeltaV High-Performance GEMs op het schema
-    const addGem = (g: Gem) => {
-      this.gems.push(g);
-      stage.append(g.el);
-    };
-    addGem(aiGem(this, 'LI-101', 365, 160));
-    addGem(pidGem(this, 'LIC-101', 535, 140));
-    addGem(emGem(this, 'EM_T101', 890, 60));
-    addGem(motorGem(this, 'MTR-102', 370, 410));
-    addGem(valveGem(this, 'XV-101', 560, 415));
-    addGem(aiGem(this, 'PDI-101', 215, 502));
-    addGem(aiGem(this, 'PI-101', 345, 502));
-    addGem(aiGem(this, 'PI-102', 475, 502));
-    addGem(aiGem(this, 'II-102', 605, 502));
-    addGem(aiGem(this, 'FT-102', 745, 365));
-    addGem(pidGem(this, 'FIC-102', 890, 265));
-    addGem(controlValveGem(this, 'FIC-102', 892, 415));
-
-    // ---- Watch Area (rechtsboven op scherm, accepteert drag & drop) ----
+    // ---- Werkgebied ----
     this.watchBody = h('div', { class: 'watch-body' });
-    const watchBox = h(
+    this.watchBox = h(
       'aside',
       {
         class: 'watch-area',
@@ -277,19 +254,69 @@ export class App {
           }
         },
       },
-      h('div', { class: 'watch-head' }, 'WATCH AREA (drag GEM here)'),
+      h('div', { class: 'watch-head' }, 'Watch Area (drag a GEM here)'),
       this.watchBody,
     );
     this.renderWatchArea();
-
-    // ---- Instructor / Scenario Malfunction Drawer ----
     this.instructorDrawer = this.buildInstructorDrawer();
+    this.graphicHost = h('div', { class: 'graphic-host' });
+    this.workspaceEl = h('main', { class: 'workspace' }, this.graphicHost, this.watchBox, this.instructorDrawer, this.wm.el);
 
-    // ---- Onderste Alarm Banner ----
+    // ---- Navigatieknoppen (onder het scherm, met alarmrollup-kleur) ----
+    this.navBtns = new Map();
+    const nav = h('div', { class: 'dv-nav' },
+      ...DISPLAYS.map((d) => {
+        const b = h('button', { class: 'dv-btn navbtn', title: d.title, onclick: () => this.showDisplay(d.id) }, d.nav);
+        this.navBtns.set(d.id, b);
+        return b;
+      }),
+      ...Array.from({ length: Math.max(0, 8 - DISPLAYS.length) }, () => h('button', { class: 'dv-btn navbtn blank', disabled: true }, '')),
+    );
+
     this.banner = new AlarmBanner(this);
+    this.root.append(titleBar, row1, toolbar, strip, this.workspaceEl, nav, this.banner.el);
+    this.showDisplay(this.displayId, false);
+  }
 
-    const workspace = h('main', { class: 'workspace' }, outer, watchBox, this.instructorDrawer, this.wm.el);
-    this.root.append(topBar, workspace, this.banner.el);
+  // ---- Displays / navigatie ----
+  showDisplay(id: string, record = true): void {
+    const def = DISPLAYS.find((d) => d.id === id) ?? DISPLAYS[0];
+    if (record && def.id !== this.displayId) {
+      this.navHistory = this.navHistory.slice(0, this.navPos + 1);
+      this.navHistory.push(def.id);
+      this.navPos = this.navHistory.length - 1;
+    }
+    if (!this.navHistory.length) {
+      this.navHistory = [def.id];
+      this.navPos = 0;
+    }
+    this.displayId = def.id;
+    this.graphic?.dispose?.();
+    clear(this.graphicHost);
+    this.graphic = def.build(this);
+    this.gems = this.graphic.gems;
+    this.graphicHost.append(this.graphic.el);
+    this.mainSel.value = def.id;
+    this.stripTitleEl.textContent = def.title;
+    this.stripRevEl.textContent = def.revisions.join('    ');
+    this.flags.add(`opened:display:${def.id}`);
+    this.refresh();
+  }
+  private navBack(): void {
+    if (this.navPos > 0) {
+      this.navPos--;
+      this.showDisplay(this.navHistory[this.navPos], false);
+    }
+  }
+  private navForward(): void {
+    if (this.navPos < this.navHistory.length - 1) {
+      this.navPos++;
+      this.showDisplay(this.navHistory[this.navPos], false);
+    }
+  }
+  private navNext(): void {
+    const i = DISPLAYS.findIndex((d) => d.id === this.displayId);
+    this.showDisplay(DISPLAYS[(i + 1) % DISPLAYS.length].id);
   }
 
   private renderWatchArea(): void {
@@ -448,18 +475,20 @@ export class App {
   }
 
   refresh(): void {
-    this.clockEl.textContent = fmtTime(this.plant.clock.now());
+    const simT = fmtTime(this.plant.clock.now());
+    this.clockEl.textContent = simT;
+    this.dvClockEl.textContent = simT;
+    this.userEl.textContent = this.role === 'OPERATOR' ? 'U-OPER' : this.role === 'SUPERVISOR' ? 'U-SUPV' : 'U-INSTR';
     const unitMods = new Set(this.plant.units[0]?.modules ?? []);
     const ru = this.alarms.rollup(unitMods);
-    this.rollupEl.textContent = ru.count ? `[${ru.count}] TANK101` : 'TANK101';
-    this.rollupEl.className = 'rollup-tab active' + (ru.top ? ` p-${ru.top.toLowerCase()}` : '');
-
-    // Tank niveau-animatie
-    const pct = Math.max(0, Math.min(1, this.t.process.level / this.t.process.capacity));
-    const hPx = 235 * pct;
-    this.tankFillEl.setAttribute('y', String(365 - hPx));
-    this.tankFillEl.setAttribute('height', String(hPx));
-    this.tankValEl.textContent = `${fmt(this.t.process.level, 1)} gal`;
+    this.rollupEl.textContent = this.displayId;
+    this.rollupEl.className = 'dv-strip-id' + (ru.top ? ` p-${ru.top.toLowerCase()}` : '');
+    for (const [id, b] of this.navBtns) {
+      const d = DISPLAYS.find((x) => x.id === id);
+      const mods = d?.unit === this.plant.units[0]?.tag ? ru : { top: null };
+      b.className = 'dv-btn navbtn' + (id === this.displayId ? ' current' : '') + (mods.top ? ` p-${mods.top.toLowerCase()}` : '');
+    }
+    this.graphic?.update();
 
     // Watch Area waarden
     for (const tag of this.watchTags) {
