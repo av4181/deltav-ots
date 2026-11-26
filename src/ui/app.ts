@@ -1,11 +1,12 @@
 import { CREDENTIALS } from '../config';
 import { ScenarioEngine } from '../scenarios/engine';
 import { buildTank101, type InitState, type Tank101 } from '../scenarios/tank101';
-import { fmtTime } from '../dcs/clock';
+import { fmtDateTime, fmtTime } from '../dcs/clock';
 import { AlarmBanner, buildAlarmHelp, buildAlarmList, buildAreaFilter, buildDiagnostics, buildUnitFaceplate } from './alarmUi';
 import { clear, fmt, h, makeStage, s, showMenu, toast } from './dom';
 import { buildFaceplate, buildMotorDetail } from './faceplates';
-import { DISPLAYS, type DisplayInstance } from './displays';
+import { DISPLAYS, DISPLAY_SET, displayChildren, type DisplayInstance } from './displays';
+import { ICONS } from './icons';
 import type { Gem } from './gems';
 import { Horn } from './horn';
 import { buildScenarioPanel } from './scenarioPanel';
@@ -33,7 +34,6 @@ export class App {
   private watchTags = new Set<string>(['LI-101', 'FIC-102']);
 
   private clockEl!: HTMLElement;
-  private rollupEl!: HTMLElement;
   private watchBody!: HTMLElement;
   private instructorDrawer!: HTMLElement;
   private instructorBtn?: HTMLElement;
@@ -41,13 +41,12 @@ export class App {
   private graphicHost!: HTMLElement;
   private workspaceEl!: HTMLElement;
   private watchBox!: HTMLElement;
-  private mainSel!: HTMLSelectElement;
   private userEl!: HTMLElement;
-  private dvClockEl!: HTMLElement;
-  private stripTitleEl!: HTMLElement;
-  private stripRevEl!: HTMLElement;
-  private navBtns = new Map<string, HTMLElement>();
-  displayId = DISPLAYS[0].id;
+  private dtEl!: HTMLElement;
+  private tabsEl!: HTMLElement;
+  private tabEls = new Map<string, { el: HTMLElement; badge: HTMLElement }>();
+  theme: 'silver' | 'night' = 'silver';
+  displayId = 'T101';
   private navHistory: string[] = [];
   private navPos = 0;
   private timer: number | null = null;
@@ -147,8 +146,9 @@ export class App {
     this.gems = [];
     this.graphic?.dispose?.();
     this.graphic = null;
+    this.root.dataset.theme = this.theme;
 
-    // ---- OTS-besturing (simulatorfuncties, niet onderdeel van DeltaV zelf) ----
+    // ---- OTS-strook (simulatorfuncties; niet onderdeel van DeltaV Live) ----
     const roleSel = h(
       'select',
       { class: 'ots-sel', title: 'Role', onchange: () => { if (!this.setRole(roleSel.value as Role)) roleSel.value = this.role; } },
@@ -171,72 +171,49 @@ export class App {
       class: 'ots-btn accent' + (this.isInstructor ? '' : ' hidden'),
       onclick: () => this.instructorDrawer.classList.toggle('open'),
     }, '⚙ Instructor');
-    const titleBar = h('div', { class: 'dv-title' },
-      h('span', { class: 'dv-logo' }, 'Δ'),
-      h('span', { class: 'dv-title-text' }, 'DeltaV Live – Operate (Run)'),
-      h('div', { class: 'ots-ctl' },
-        h('span', { class: 'ots-lbl' }, 'OTS'),
-        h('button', { class: 'ots-btn', onclick: () => this.loadScenario('RUNNING') }, 'Reset: Running'),
-        h('button', { class: 'ots-btn', onclick: () => this.loadScenario('COLD') }, 'Reset: Cold start'),
-        h('button', { class: 'ots-btn', onclick: () => this.openScenarioPanel() }, 'Scenarios'),
-        this.instructorBtn, roleSel, speedSel, pauseBtn, this.clockEl),
+    const otsBar = h('div', { class: 'ots-bar' },
+      h('span', { class: 'ots-lbl' }, 'OPERATOR TRAINING SIMULATOR'),
+      h('span', { class: 'ots-spacer' }),
+      h('button', { class: 'ots-btn', onclick: () => this.loadScenario('RUNNING') }, 'Reset: Running'),
+      h('button', { class: 'ots-btn', onclick: () => this.loadScenario('COLD') }, 'Reset: Cold start'),
+      h('button', { class: 'ots-btn', onclick: () => this.openScenarioPanel() }, 'Scenarios'),
+      this.instructorBtn, roleSel, speedSel, pauseBtn, this.clockEl);
+
+    // ---- DeltaV Live-werkbalk (pictogrammen links, datum/tijd + gebruiker rechts) ----
+    const tb = (icon: string, title: string, onclick: (e: MouseEvent) => void, cls = '') => {
+      const b = h('button', { class: 'lv-btn ' + cls, title, onclick });
+      b.innerHTML = ICONS[icon] ?? ICONS.generic;
+      return b;
+    };
+    this.dtEl = h('span', { class: 'lv-dt' });
+    this.userEl = h('span', { class: 'lv-user' });
+    const toolbar = h('div', { class: 'lv-toolbar' },
+      tb('search', 'Search for a module / display', () => this.searchModule()),
+      tb('heart', 'DeltaV Diagnostics', () => this.openDiagnostics()),
+      tb('tools', 'Tools', (e) => this.toolsMenu(e)),
+      tb('refresh', 'Refresh the display', () => this.showDisplay(this.displayId, false)),
+      h('span', { class: 'lv-sep' }),
+      tb('alarmlist', 'Alarm List', () => this.openAlarmList()),
+      tb('unit', 'Unit alarms', () => this.openUnit(this.plant.units[0].tag)),
+      tb('filter', 'Area alarm filtering', () => this.openAreaFilter()),
+      tb('phv', 'Process History View – Chart', () => this.openPhv()),
+      tb('events', 'Process History View – Events', () => this.openPhv()),
+      tb('watch', 'Watch Area', () => this.watchBox.classList.toggle('hidden')),
+      tb('help', 'Operator help', () => toast('Click a module for its faceplate, right-click for more. Hover the alarm banner for alarm details.')),
+      h('span', { class: 'lv-spacer' }),
+      this.dtEl, this.userEl,
     );
 
-    // ---- Module / Main / Username / klok ----
-    const moduleSel = h(
-      'select',
-      { class: 'dv-combo', title: 'Module – selecteer om het faceplate te openen', onchange: () => { if (moduleSel.value) this.openFaceplate(moduleSel.value); moduleSel.selectedIndex = 0; } },
-      h('option', { value: '' }, this.plant.units[0]?.tag ?? 'TANK101'),
-      ...this.plant.units[0].modules.map((m) => h('option', { value: m }, m)),
-    );
-    this.mainSel = h(
-      'select',
-      { class: 'dv-combo wide', title: 'Main – huidig display', onchange: () => this.showDisplay(this.mainSel.value) },
-      ...DISPLAYS.map((d) => h('option', { value: d.id, selected: d.id === this.displayId }, d.id)),
-    );
-    this.userEl = h('div', { class: 'dv-field user' }, this.role);
-    this.dvClockEl = h('div', { class: 'dv-field clock' });
-    const row1 = h('div', { class: 'dv-row' },
-      h('span', { class: 'dv-lbl' }, 'Module'), moduleSel,
-      h('span', { class: 'dv-lbl main' }, 'Main'), this.mainSel,
-      h('span', { class: 'dv-lbl user' }, 'Username'), this.userEl,
-      this.dvClockEl);
-
-    // ---- Toolbar ----
-    const tb = (glyph: string, title: string, onclick: () => void, extra = '') => h('button', { class: 'dv-btn tool ' + extra, title, onclick }, glyph);
-    const toolbar = h('div', { class: 'dv-toolbar' },
-      tb('◀', 'Previous display', () => this.navBack()),
-      tb('⎙', 'Print display (not available in the OTS)', () => toast('Printing is not available in the OTS')),
-      h('span', { class: 'tsep' }),
-      tb('▤', 'Alarm List Summary', () => this.openAlarmList()),
-      tb('⚑', 'Unit alarms – TANK101', () => this.openUnit('TANK101')),
-      tb('⛔', 'Area alarm filtering', () => this.openAreaFilter()),
-      h('span', { class: 'tsep' }),
-      tb('📈', 'Process History View', () => this.openPhv()),
-      tb('☰', 'Event Journal (History / Journal)', () => this.openPhv()),
-      tb('⚙', 'EM_T101 faceplate', () => this.openFaceplate('EM_T101')),
-      h('span', { class: 'tsep' }),
-      tb('🖧', 'DeltaV Diagnostics', () => this.openDiagnostics()),
-      tb('👁', 'Watch Area on/off', () => this.watchBox.classList.toggle('hidden')),
-      tb('?', 'Help', () => toast('Operator help: click a GEM for its faceplate, right-click for the menu.')),
-    );
-
-    // ---- Titelstrook ----
-    this.rollupEl = h('div', { class: 'dv-strip-id' });
-    this.stripTitleEl = h('div', { class: 'dv-strip-title' });
-    this.stripRevEl = h('div', { class: 'dv-strip-rev' });
-    const sbtn = (t: string, title: string, onclick?: () => void, off = false) => h('button', { class: 'dv-btn strip' + (off ? ' off' : ''), title, onclick: off ? undefined : onclick, disabled: off }, t);
-    const strip = h('div', { class: 'dv-strip' },
-      this.rollupEl, this.stripRevEl, this.stripTitleEl,
-      h('div', { class: 'dv-strip-btns' },
-        sbtn('T', 'Trend of this display', () => this.openPhv()),
-        sbtn('ESD', 'ESD – not configured for this display', undefined, true),
-        sbtn('E.U', 'Show / hide engineering units', () => this.workspaceEl.classList.toggle('no-eu')),
-        sbtn('◁', 'Back', () => this.navBack()),
-        sbtn('△', 'Top-level display', () => this.showDisplay(DISPLAYS[0].id)),
-        sbtn('▽', 'Next display', () => this.navNext()),
-        sbtn('▷', 'Forward', () => this.navForward())),
-    );
+    // ---- Navigatiebalk: ← → ↑ ⌂ en display-set-tabs ----
+    const nb = (icon: string, title: string, onclick: () => void) => tb(icon, title, onclick, 'nav');
+    this.tabsEl = h('div', { class: 'lv-tabs' });
+    const navbar = h('div', { class: 'lv-nav' },
+      nb('back', 'Back (previously opened display)', () => this.navBack()),
+      nb('fwd', 'Forward', () => this.navForward()),
+      nb('up', 'Up one level in the display hierarchy', () => this.navUp()),
+      nb('home', 'Home display of the display set', () => this.showDisplay(DISPLAY_SET.home)),
+      this.tabsEl);
+    this.buildTabs();
 
     // ---- Werkgebied ----
     this.watchBody = h('div', { class: 'watch-body' });
@@ -254,7 +231,7 @@ export class App {
           }
         },
       },
-      h('div', { class: 'watch-head' }, 'Watch Area (drag a GEM here)'),
+      h('div', { class: 'watch-head' }, 'Watch Area (drag a module here)'),
       this.watchBody,
     );
     this.renderWatchArea();
@@ -262,20 +239,55 @@ export class App {
     this.graphicHost = h('div', { class: 'graphic-host' });
     this.workspaceEl = h('main', { class: 'workspace' }, this.graphicHost, this.watchBox, this.instructorDrawer, this.wm.el);
 
-    // ---- Navigatieknoppen (onder het scherm, met alarmrollup-kleur) ----
-    this.navBtns = new Map();
-    const nav = h('div', { class: 'dv-nav' },
-      ...DISPLAYS.map((d) => {
-        const b = h('button', { class: 'dv-btn navbtn', title: d.title, onclick: () => this.showDisplay(d.id) }, d.nav);
-        this.navBtns.set(d.id, b);
-        return b;
-      }),
-      ...Array.from({ length: Math.max(0, 8 - DISPLAYS.length) }, () => h('button', { class: 'dv-btn navbtn blank', disabled: true }, '')),
-    );
-
     this.banner = new AlarmBanner(this);
-    this.root.append(titleBar, row1, toolbar, strip, this.workspaceEl, nav, this.banner.el);
+    this.root.append(otsBar, toolbar, navbar, this.workspaceEl, this.banner.el);
     this.showDisplay(this.displayId, false);
+  }
+
+  // ---- Display-set tabs ----
+  private buildTabs(): void {
+    clear(this.tabsEl);
+    this.tabEls.clear();
+    const label = h('span', { class: 'lv-setname', title: 'Display Set' }, DISPLAY_SET.name);
+    this.tabsEl.append(label);
+    for (const d of displayChildren(DISPLAY_SET.home)) {
+      const badge = h('span', { class: 'lv-badge hidden' });
+      const main = h('button', { class: 'lv-tabmain', onclick: () => this.showDisplay(d.id) }, badge, d.nav);
+      const kids = displayChildren(d.id);
+      const arrow = kids.length
+        ? h('button', { class: 'lv-tabarrow', title: 'Displays below this one', onclick: (e: MouseEvent) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            showMenu(r.left, r.bottom, [{ label: d.title, onClick: () => this.showDisplay(d.id) }, ...kids.map((k) => ({ label: k.title, onClick: () => this.showDisplay(k.id) }))]);
+          } }, '▾')
+        : null;
+      const el = h('div', { class: 'lv-tab' }, main, arrow);
+      this.tabsEl.append(el);
+      this.tabEls.set(d.id, { el, badge });
+    }
+  }
+
+  private toolsMenu(e: MouseEvent): void {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    showMenu(r.left, r.bottom, [
+      { label: 'Print                Ctrl+P', onClick: () => window.print() },
+      { label: 'Reset Layout (close all windows)', onClick: () => this.wm.closeAll() },
+      { label: `Display Set: ${DISPLAY_SET.name} ✓`, onClick: () => toast('Only the display set “MainProcess” is available on this workstation') },
+      { label: `Theme: Silver${this.theme === 'silver' ? ' ✓' : ''}`, onClick: () => this.setTheme('silver') },
+      { label: `Theme: Night${this.theme === 'night' ? ' ✓' : ''}`, onClick: () => this.setTheme('night') },
+      { label: 'Language: English ✓', onClick: () => toast('Operator interface language: English') },
+    ]);
+  }
+
+  setTheme(t: 'silver' | 'night'): void {
+    this.theme = t;
+    this.root.dataset.theme = t;
+  }
+
+  private searchModule(): void {
+    const tag = window.prompt('Open faceplate for module (tag):', 'FIC-102')?.trim().toUpperCase();
+    if (!tag) return;
+    if (this.plant.mod(tag)) this.openFaceplate(tag);
+    else toast(`Module ${tag} not found`, 'error');
   }
 
   // ---- Displays / navigatie ----
@@ -296,11 +308,12 @@ export class App {
     this.graphic = def.build(this);
     this.gems = this.graphic.gems;
     this.graphicHost.append(this.graphic.el);
-    this.mainSel.value = def.id;
-    this.stripTitleEl.textContent = def.title;
-    this.stripRevEl.textContent = def.revisions.join('    ');
     this.flags.add(`opened:display:${def.id}`);
     this.refresh();
+  }
+  private navUp(): void {
+    const d = DISPLAYS.find((x) => x.id === this.displayId);
+    if (d?.parent) this.showDisplay(d.parent);
   }
   private navBack(): void {
     if (this.navPos > 0) {
@@ -313,10 +326,6 @@ export class App {
       this.navPos++;
       this.showDisplay(this.navHistory[this.navPos], false);
     }
-  }
-  private navNext(): void {
-    const i = DISPLAYS.findIndex((d) => d.id === this.displayId);
-    this.showDisplay(DISPLAYS[(i + 1) % DISPLAYS.length].id);
   }
 
   private renderWatchArea(): void {
@@ -475,18 +484,26 @@ export class App {
   }
 
   refresh(): void {
-    const simT = fmtTime(this.plant.clock.now());
-    this.clockEl.textContent = simT;
-    this.dvClockEl.textContent = simT;
-    this.userEl.textContent = this.role === 'OPERATOR' ? 'U-OPER' : this.role === 'SUPERVISOR' ? 'U-SUPV' : 'U-INSTR';
-    const unitMods = new Set(this.plant.units[0]?.modules ?? []);
-    const ru = this.alarms.rollup(unitMods);
-    this.rollupEl.textContent = this.displayId;
-    this.rollupEl.className = 'dv-strip-id' + (ru.top ? ` p-${ru.top.toLowerCase()}` : '');
-    for (const [id, b] of this.navBtns) {
-      const d = DISPLAYS.find((x) => x.id === id);
-      const mods = d?.unit === this.plant.units[0]?.tag ? ru : { top: null };
-      b.className = 'dv-btn navbtn' + (id === this.displayId ? ' current' : '') + (mods.top ? ` p-${mods.top.toLowerCase()}` : '');
+    this.clockEl.textContent = fmtTime(this.plant.clock.now());
+    this.dtEl.textContent = new Date(this.plant.clock.now()).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    this.userEl.textContent = `OPS\\${this.role}`;
+    const cur = DISPLAYS.find((d) => d.id === this.displayId);
+    const chain = new Set<string>();
+    for (let d = cur; d; d = DISPLAYS.find((x) => x.id === d?.parent)) chain.add(d.id);
+    for (const [id, t] of this.tabEls) {
+      const def = DISPLAYS.find((x) => x.id === id);
+      const mods = new Set<string>();
+      const collect = (did: string) => {
+        const d = DISPLAYS.find((x) => x.id === did);
+        const u = this.plant.units.find((x) => x.tag === d?.unit);
+        u?.modules.forEach((m) => mods.add(m));
+        displayChildren(did).forEach((k) => collect(k.id));
+      };
+      collect(def?.id ?? id);
+      const r = this.alarms.rollup(mods);
+      t.badge.textContent = r.count ? String(r.count) : '';
+      t.badge.className = 'lv-badge' + (r.count && r.top ? ` p-${r.top.toLowerCase()}` : ' hidden');
+      t.el.classList.toggle('current', chain.has(id));
     }
     this.graphic?.update();
 

@@ -18,6 +18,10 @@ export interface DisplayDef {
   revisions: string[];
   /** unit waarvan het alarmrollup-kleur op de navigatieknop komt */
   unit?: string;
+  /** hiërarchieniveau (1 = overzicht … 4 = diagnose, zoals in DeltaV Live display sets) */
+  level: 1 | 2 | 3 | 4;
+  /** parent-display (voor de UP-pijl en de tab-dropdown) */
+  parent?: string;
   build(app: App): DisplayInstance;
 }
 
@@ -36,6 +40,8 @@ const tank101: DisplayDef = {
   title: 'TANK101 – Level Cascade',
   revisions: ['REV.1  25-11-26'],
   unit: 'TANK101',
+  level: 2,
+  parent: 'OVERVIEW',
   build(app) {
     const { outer, stage } = makeStage(1180, 560);
     const svg = s('svg', { viewBox: '0 0 1180 560', width: 1180, height: 560, class: 'pid-svg' });
@@ -105,6 +111,8 @@ const trends: DisplayDef = {
   title: 'TANK101 – Embedded Trends',
   revisions: ['REV.1  25-11-26'],
   unit: 'TANK101',
+  level: 4,
+  parent: 'T101',
   build(app) {
     const groups: { title: string; mods: string[] }[] = [
       { title: 'Level  (LI-101, LIC-101)', mods: ['LI-101', 'LIC-101'] },
@@ -117,4 +125,38 @@ const trends: DisplayDef = {
   },
 };
 
-export const DISPLAYS: DisplayDef[] = [tank101, trends];
+// ------------------------------------------------------------------- OVERVIEW (level 1)
+const overview: DisplayDef = {
+  id: 'OVERVIEW',
+  nav: 'Overview',
+  title: 'Plant Overview',
+  revisions: [],
+  level: 1,
+  build(app) {
+    const tiles: { id: string; label: string; unit?: string; el: HTMLElement }[] = [];
+    const tile = (id: string, label: string, x: number, y: number, unit?: string) => {
+      const el = h('button', { class: 'ov-tile', style: `left:${x}px;top:${y}px`, disabled: !DISPLAYS.some((d) => d.id === id), onclick: () => app.showDisplay(id) }, label);
+      tiles.push({ id, label, unit, el });
+      return el;
+    };
+    const { outer, stage } = makeStage(1180, 560);
+    stage.append(
+      h('div', { class: 'ov-title' }, 'PLANT OVERVIEW'),
+      tile('T101', 'TANK101', 120, 160, 'TANK101'),
+    );
+    return {
+      el: outer,
+      gems: [],
+      update: () => {
+        for (const t of tiles) {
+          const r = t.unit ? app.alarms.rollup(new Set(app.plant.units.find((u) => u.tag === t.unit)?.modules ?? [])) : { top: null, count: 0, unacked: false };
+          t.el.className = 'ov-tile' + (r.top ? ` p-${r.top.toLowerCase()}` : '') + (r.unacked ? ' unack' : '');
+        }
+      },
+    };
+  },
+};
+
+export const DISPLAYS: DisplayDef[] = [overview, tank101, trends];
+export const DISPLAY_SET = { name: 'MainProcess', home: 'OVERVIEW' };
+export const displayChildren = (id: string): DisplayDef[] => DISPLAYS.filter((d) => d.parent === id);

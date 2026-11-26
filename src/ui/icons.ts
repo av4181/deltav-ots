@@ -1,0 +1,26 @@
+/** Eenvoudige DeltaV Live-achtige werkbalkpictogrammen (inline SVG, 20 px). */
+const wrap = (inner: string) => `<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+export const ICONS: Record<string, string> = {
+  generic: wrap('<rect x="5" y="5" width="14" height="14"/>'),
+  search: wrap('<circle cx="10" cy="10" r="6"/><path d="M15 15 L21 21"/>'),
+  heart: wrap('<path d="M2 12 H7 L9 6 L13 18 L15 12 H22" stroke="#c0392b"/>'),
+  tools: wrap('<path d="M4 20 L14 10"/><path d="M14 4 a5 5 0 0 0 6 6 L17 13 11 7 Z"/>'),
+  refresh: wrap('<path d="M20 12 a8 8 0 1 1 -3 -6"/><path d="M20 4 V9 H15"/>'),
+  alarmlist: wrap('<path d="M5 18 H19 L17 15 V10 a5 5 0 0 0 -10 0 V15 Z"/><path d="M10 21 H14"/>'),
+  unit: wrap('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 12 H16 M12 8 V16"/>'),
+  filter: wrap('<path d="M3 5 H21 L14 13 V20 L10 18 V13 Z"/>'),
+  phv: wrap('<path d="M3 20 H21 M5 16 L10 10 L14 14 L20 6"/>'),
+  events: wrap('<rect x="4" y="4" width="16" height="16"/><path d="M4 9 H20 M4 14 H20 M10 4 V20"/>'),
+  watch: wrap('<circle cx="12" cy="12" r="3"/><path d="M2 12 C6 5 18 5 22 12 C18 19 6 19 2 12 Z"/>'),
+  help: wrap('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5 a2.5 2.5 0 1 1 3.5 2.3 C12.3 12.2 12 12.8 12 13.5 M12 17 V17.1"/>'),
+  back: wrap('<path d="M20 12 H5 M11 6 L5 12 L11 18"/>'),
+  fwd: wrap('<path d="M4 12 H19 M13 6 L19 12 L13 18"/>'),
+  up: wrap('<path d="M12 20 V5 M6 11 L12 5 L18 11"/>'),
+  home: wrap('<path d="M3 12 L12 4 L21 12 M6 10 V20 H18 V10"/>'),
+  detail: wrap('<rect x="4" y="4" width="16" height="16"/><path d="M8 9 H16 M8 13 H16 M8 17 H13"/>'),
+  primary: wrap('<circle cx="8" cy="12" r="4" stroke="#c0392b"/><circle cx="16" cy="12" r="4" stroke="#1f5fa8"/>'),
+  studio: wrap('<rect x="4" y="5" width="16" height="11"/><path d="M9 20 H15 M12 16 V20"/>'),
+  ack: wrap('<path d="M5 18 H19 L17 15 V10 a5 5 0 0 0 -10 0 V15 Z" fill="#f1c40f"/><path d="M10 21 H14"/>'),
+  horn: wrap('<path d="M4 9 H8 L14 4 V20 L8 15 H4 Z" fill="currentColor"/><path d="M17 9 a4 4 0 0 1 0 6"/>'),
+  hornoff: wrap('<path d="M4 9 H8 L14 4 V20 L8 15 H4 Z" fill="currentColor"/><path d="M17 8 L23 16 M23 8 L17 16" stroke="#c0392b"/>'),
+};

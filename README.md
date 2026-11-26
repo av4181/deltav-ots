@@ -43,7 +43,17 @@ HeatExchangerStream, Burner (WSGG-straling), FlashCalculator/thermo-pakket (PT/P
 `tests/model.test.ts` controleert de modellen tegen de vergelijkingen uit de documenten; `tests/sim.test.ts` de DCS-laag;
 `tests/scenarios.test.ts` laat een goede en een passieve operator de scenario's doorlopen.
 
-## v0.3 – DeltaV Operate-look
-- Titelbalk met aparte OTS-strip, Module/Main/Username, toolbar, displaystrook (T / ESD / E.U / ◁ △ ▽ ▷), navigatieknoppen met alarmrollup, banner met infolijn en statusbalk.
-- Displays zijn modulair (`src/ui/displays.ts`, `DISPLAYS`); nieuwe schermen = nieuwe `DisplayDef`.
-- Stijl: `src/dv.css` (kleurconventie: klep dicht zwart, open groen; alarm rood/geel/magenta).
+## v0.3 – DeltaV Live-look (Silver-thema)
+Gebaseerd op de DeltaV Live-trainingsdocumenten (Display Navigation, Simulated Process, Discrete/Analog Operations, Alarms and Events,
+Motor Control, Regulatory Control, Trending, Cascade, Unit Alarms, Equipment Modules).
+- **Werkbalk** met pictogrammen (zoeken, diagnostics, Tools, refresh, alarmlijst, unit-alarmen, area filtering, PHV chart/events, Watch Area, help)
+  en rechts datum/tijd + gebruiker. **Tools-menu**: Print, Reset Layout, Display Set, Themes (Silver/Night), Languages.
+- **Navigatiebalk**: ← → (display-historiek), ↑ (één niveau omhoog in de hiërarchie), ⌂ (home) en **display-set-tabs** met alarmtelling (rollup) en
+  dropdown naar onderliggende displays. Hiërarchie in `src/ui/displays.ts` (`level`, `parent`): OVERVIEW (L1) → TANK101 (L2) → Trends (L4).
+- **Alarmbanner** onderaan (zoals Live): pills met prioriteitsicoon (critical rood ⊗, warning geel ▲, advisory paars ▼), hover-popup met details,
+  rechts ack-all, silence horn, horn aan/uit, direct-access (Help / Faceplate / Primary), help en node-status.
+- **Faceplates** in Live-stijl: tag + beschrijving, PV/OUT, SP-slew + SP-slider op de PV-balk met alarmgrenzen, target/actual mode, OUT-balk,
+  mini-trend, alarmlijst (Ack / Alarm / Help) en 5 ronde snelkoppelingen (detail, primary, Control Studio, PHV, ack). Discreet: state-knoppen met
+  zwarte SP-rand, Accept, State Transition (Time Limit / Elapsed), Device State, Fail Alarm. EM: Run Command, Run, Restart Current Command.
+- Kleurconventie in `src/dv.css` (variabelen bovenaan): klep/pomp open = groen, dicht = donker; alarmkleuren volgens DeltaV.
+- OTS-functies (reset, scenario's, instructeur, snelheid, pauze) staan in een aparte donkere strook bovenaan; die bestaan niet in echt DeltaV.

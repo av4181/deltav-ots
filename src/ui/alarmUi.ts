@@ -1,4 +1,5 @@
 import { fmtDateTime, fmtTime } from '../dcs/clock';
+import { ICONS } from './icons';
 import { getHelp, saveHelp, type AlarmHelp } from '../scenarios/alarmHelp';
 import { rankCompare, type BannerItem } from '../dcs/alarms';
 import type { AlarmState, AlarmType, Priority } from '../dcs/types';
@@ -145,86 +146,85 @@ export class AlarmTable implements View {
 }
 
 // ---------------------------------------------------------------- banner
-const SLOTS = 5;
-const SVG_ACK = '<svg viewBox="0 0 32 24" width="30" height="22"><path d="M5 12 L13 19 L27 4" fill="none" stroke="#006400" stroke-width="3.5"/></svg>';
-const SVG_SIL = '<svg viewBox="0 0 32 24" width="30" height="22"><path d="M4 9 H9 L16 3 V21 L9 15 H4 Z" fill="#444"/><path d="M20 8 L28 16 M28 8 L20 16" stroke="#b00000" stroke-width="2.5"/></svg>';
-const SVG_LIST = '<svg viewBox="0 0 32 24" width="30" height="22"><path d="M4 5 H28 M4 12 H28 M4 19 H28" stroke="#222" stroke-width="3"/><circle cx="26" cy="19" r="4" fill="#d00000"/></svg>';
+const SLOTS = 8;
+const PRIO_ICON: Record<string, string> = {
+  CRITICAL: '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="7" fill="#d40000" stroke="#600"/><path d="M5 5 L11 11 M11 5 L5 11" stroke="#fff" stroke-width="2"/></svg>',
+  WARNING: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 1.5 L15 14 H1 Z" fill="#f2c200" stroke="#7a6000"/><path d="M8 6 V10 M8 12 V12.1" stroke="#000" stroke-width="1.6"/></svg>',
+  ADVISORY: '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M1 2.5 H15 L8 14.5 Z" fill="#8e44ad" stroke="#4a1a60"/></svg>',
+  LOG: '<svg viewBox="0 0 16 16" width="14" height="14"><circle cx="8" cy="8" r="6" fill="#2d6cdf"/></svg>',
+};
 
-/** Onderste deel van het DeltaV-scherm: alarmbanner (5 cellen met i-knop), infolijn van het geselecteerde alarm en statusbalk. */
+/** Onderste deel van DeltaV Live: één alarmbanner (hoogste alarmen links, knoppen rechts) met hover-details. */
 export class AlarmBanner implements View {
   readonly el: HTMLElement;
-  private cells: { box: HTMLElement; text: HTMLElement; info: HTMLElement }[] = [];
+  private pills: { box: HTMLElement; ico: HTMLElement; text: HTMLElement }[] = [];
   private items: (BannerItem | null)[] = [];
-  private selected = 0;
   private ackBtn: HTMLButtonElement;
   private silenceBtn: HTMLButtonElement;
   private hornBtn: HTMLButtonElement;
-  private info: Record<'time' | 'desc' | 'tag' | 'type' | 'level' | 'more', HTMLElement>;
-  private nodeBox: HTMLElement;
-  private commA: HTMLElement;
-  private commB: HTMLElement;
+  private tip: HTMLElement;
+  private nodeBtn: HTMLElement;
   private flagsEl: HTMLElement;
+  private moreEl: HTMLElement;
+  private cells: HTMLElement[] = [];
   private toggles: Record<'help' | 'faceplate' | 'primary', HTMLButtonElement>;
 
   constructor(private app: App) {
-    const icon = (svg: string, title: string, onclick: () => void) => {
-      const b = h('button', { class: 'dv-btn bicon', title, onclick });
-      b.innerHTML = svg;
+    const icon = (name: string, title: string, onclick: () => void, cls = '') => {
+      const b = h('button', { class: 'lv-btn bb ' + cls, title, onclick });
+      b.innerHTML = ICONS[name];
       return b;
     };
-    this.ackBtn = icon(SVG_ACK, 'Acknowledge All Alarms', () => { app.alarms.ackAllVisible(); app.flag('acked'); });
-    this.silenceBtn = icon(SVG_SIL, 'Silence Horn', () => { app.alarms.hornSilenced = true; app.flag('horn-silenced'); });
-    const listBtn = icon(SVG_LIST, 'Alarm List Summary', () => app.openAlarmList());
-    this.hornBtn = h('button', { class: 'dv-btn mini', title: 'Enable / Disable Horn', onclick: () => { app.alarms.hornEnabled = !app.alarms.hornEnabled; } }, 'HORN');
-    const mk = (k: 'help' | 'faceplate' | 'primary', label: string, title: string) =>
-      h('button', { class: 'dv-btn mini tgl', title, onclick: () => { app.directAccess[k] = !app.directAccess[k]; } }, label);
+    this.ackBtn = icon('ack', 'Acknowledge All Alarms', () => { app.alarms.ackAllVisible(); app.flag('acked'); });
+    this.silenceBtn = icon('hornoff', 'Silence Horn (does not acknowledge)', () => { app.alarms.hornSilenced = true; app.flag('horn-silenced'); });
+    this.hornBtn = icon('horn', 'Enable / Disable Horn', () => { app.alarms.hornEnabled = !app.alarms.hornEnabled; });
+    const mk = (k: 'help' | 'faceplate' | 'primary', ic: string, title: string) =>
+      icon(ic, title, () => { app.directAccess[k] = !app.directAccess[k]; }, 'tgl');
     this.toggles = {
-      help: mk('help', 'Help', 'Alarm direct access to Alarm Help'),
-      faceplate: mk('faceplate', 'Face', 'Alarm direct access to the Faceplate'),
-      primary: mk('primary', 'Prim', 'Alarm direct access to the Primary Control display'),
+      help: mk('help', 'help', 'Alarm direct access: Alarm Help'),
+      faceplate: mk('faceplate', 'detail', 'Alarm direct access: Faceplate'),
+      primary: mk('primary', 'primary', 'Alarm direct access: Primary Control display'),
     };
+    this.tip = h('div', { class: 'lv-tip hidden' });
     for (let i = 0; i < SLOTS; i++) {
-      const text = h('div', { class: 'bcell-text' });
-      const info = h('button', { class: 'bcell-i', title: 'Alarm Help' }, 'i');
-      const box = h('div', { class: 'bcell empty' }, text, info);
-      text.addEventListener('click', () => { this.selected = i; this.click(i); });
-      text.addEventListener('mouseenter', () => { this.selected = i; });
-      text.addEventListener('contextmenu', (e) => {
+      const ico = h('span', { class: 'pill-ico' });
+      const text = h('span', { class: 'pill-text' });
+      const box = h('button', { class: 'lv-pill empty' }, ico, text);
+      box.addEventListener('click', () => this.click(i));
+      box.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         const it = this.items[i];
         if (it && !it.isUnit) app.openAlarmHelp(it.top.id);
       });
-      info.addEventListener('click', () => {
-        const it = this.items[i];
-        if (it && !it.isUnit) app.openAlarmHelp(it.top.id);
-      });
-      this.cells.push({ box, text, info });
+      box.addEventListener('mouseenter', () => this.showTip(i, box));
+      box.addEventListener('mouseleave', () => this.tip.classList.add('hidden'));
+      this.pills.push({ box, ico, text });
     }
-    this.info = {
-      time: h('div', { class: 'icell w-time' }),
-      desc: h('div', { class: 'icell w-desc' }),
-      tag: h('div', { class: 'icell w-tag' }),
-      type: h('div', { class: 'icell w-type' }),
-      level: h('div', { class: 'icell w-level' }),
-      more: h('div', { class: 'icell w-more', title: 'More alarms – open Alarm List', onclick: () => app.openAlarmList() }),
-    };
-    this.flagsEl = h('span', { class: 'bflags', title: 'Alarms suppressed / areas filtered' });
-    this.commA = h('span', { class: 'comm' });
-    this.commB = h('span', { class: 'comm' });
-    this.nodeBox = h('div', { class: 'nodebox', title: 'Hardware Node Status (click: diagnostics)', onclick: () => app.openDiagnostics() }, 'CTLR1');
-    this.el = h('div', { class: 'dv-bottom' },
-      h('div', { class: 'dv-banner' },
-        h('div', { class: 'bcells' }, ...this.cells.map((c) => c.box)),
-        h('div', { class: 'bicons' }, this.ackBtn, this.silenceBtn, listBtn)),
-      h('div', { class: 'dv-info' },
-        this.info.time, this.info.desc, this.info.tag, this.info.type, this.info.level, this.info.more,
-        h('div', { class: 'itools' }, this.flagsEl, this.hornBtn, this.toggles.help, this.toggles.faceplate, this.toggles.primary)),
-      h('div', { class: 'dv-status' },
-        h('div', { class: 'srun' }, 'Run'),
-        h('div', { class: 'sspace' }),
-        this.nodeBox, h('div', { class: 'comms' }, this.commA, this.commB),
-        h('div', { class: 'snum' }, 'NUM')),
-    );
+    this.flagsEl = h('span', { class: 'bflags', title: 'Alarm areas filtered / alarms suppressed' });
+    this.moreEl = h('button', { class: 'lv-more hidden', title: 'More alarms – open the Alarm List', onclick: () => app.openAlarmList() });
+    const mkc = () => h('span', { class: 'ns-cell' });
+    this.cells = [mkc(), mkc(), mkc(), mkc()];
+    this.nodeBtn = h('button', { class: 'lv-node', title: 'Node status (click: DeltaV Diagnostics)', onclick: () => app.openDiagnostics() }, ...this.cells);
+    const help = h('button', { class: 'lv-btn bb', title: 'Alarm Banner Help', onclick: () => toast('Pills: highest-ranked alarms left to right (critical red, warning yellow, advisory purple). Click = faceplate and primary display.') });
+    help.innerHTML = ICONS.help;
+    this.el = h('div', { class: 'lv-banner' },
+      h('div', { class: 'lv-pills' }, ...this.pills.map((p) => p.box), this.moreEl),
+      h('div', { class: 'lv-bbtns' }, this.flagsEl, this.toggles.help, this.toggles.faceplate, this.toggles.primary, this.ackBtn, this.silenceBtn, this.hornBtn, help, this.nodeBtn),
+      this.tip);
+  }
+
+  private showTip(i: number, anchor: HTMLElement): void {
+    const it = this.items[i];
+    if (!it) return;
+    const a = it.top;
+    const rows: [string, string][] = it.isUnit
+      ? [['Unit', it.label], ['Alarms', String(it.count)], ['Highest', `${a.def.module} ${a.def.param}`], ['Priority', a.def.priority]]
+      : [['Time in', fmtDateTime(a.timeIn)], ['Description', a.def.description], ['Parameter', `${a.def.module}/${a.def.param}`], ['Alarm Word', a.message], ['Priority', a.def.priority]];
+    clear(this.tip);
+    for (const [k, v] of rows) this.tip.append(h('div', null, h('span', { class: 'tip-k' }, k + ':'), h('span', { class: 'tip-v' }, v)));
+    const r = anchor.getBoundingClientRect();
+    this.tip.style.left = Math.max(4, r.left) + 'px';
+    this.tip.classList.remove('hidden');
   }
 
   private click(i: number): void {
@@ -244,38 +244,23 @@ export class AlarmBanner implements View {
     this.items = items.slice(0, SLOTS);
     for (let i = 0; i < SLOTS; i++) {
       const it = items[i];
-      const c = this.cells[i];
+      const c = this.pills[i];
       if (!it) {
-        c.box.className = 'bcell empty';
+        c.box.className = 'lv-pill empty';
         c.text.textContent = '';
-        c.text.title = '';
         continue;
       }
       const a = it.top;
-      c.box.className = `bcell ${pClass(a.def.priority)}${a.active ? '' : ' inactive'}${a.acked ? ' acked' : ' unack'}`;
-      const txt = it.isUnit ? `${it.label} (${it.count})` : it.label;
+      c.box.className = `lv-pill ${pClass(a.def.priority)}${a.active ? '' : ' inactive'}${a.acked ? ' acked' : ' unack'}`;
+      const ico = PRIO_ICON[a.def.priority] ?? PRIO_ICON.LOG;
+      if (c.ico.innerHTML !== ico) c.ico.innerHTML = ico;
+      const txt = it.isUnit ? it.label : it.label;
       if (c.text.textContent !== txt) c.text.textContent = txt;
-      c.text.title = it.isUnit
-        ? `${it.label}: ${it.count} alarm(s) – highest ${a.def.module} ${a.def.param}`
-        : `${a.def.module} ${a.def.param}\n${a.message}\nTime in ${fmtTime(a.timeIn)}`;
     }
-    // infolijn: geselecteerd (muis) of hoogste alarm
-    const it = this.items[this.selected] ?? this.items[0] ?? null;
-    if (it) {
-      const a = it.top;
-      this.info.time.textContent = fmtDateTime(a.timeIn);
-      this.info.desc.textContent = it.isUnit ? `Unit ${it.label}` : a.def.description;
-      this.info.tag.textContent = it.isUnit ? `${it.count} alarms` : `${a.def.module}/${a.def.param}`;
-      this.info.type.textContent = it.isUnit ? '' : a.message;
-      this.info.level.textContent = a.def.priority;
-      this.info.level.className = `icell w-level ${pClass(a.def.priority)}`;
-    } else {
-      for (const k of ['time', 'desc', 'tag', 'type', 'level'] as const) this.info[k].textContent = '';
-      this.info.level.className = 'icell w-level';
-    }
-    this.info.more.textContent = items.length > SLOTS ? `+${items.length - SLOTS}` : '';
+    this.moreEl.textContent = items.length > SLOTS ? `+${items.length - SLOTS}` : '';
+    this.moreEl.classList.toggle('hidden', items.length <= SLOTS);
     this.hornBtn.classList.toggle('off', !al.hornEnabled);
-    this.hornBtn.textContent = al.hornEnabled ? 'HORN' : 'HORN OFF';
+    this.hornBtn.innerHTML = al.hornEnabled ? ICONS.horn : ICONS.hornoff;
     const hs = al.hornState();
     this.silenceBtn.classList.toggle('flash', hs.sounding);
     this.ackBtn.classList.toggle('flash', items.some((x) => !x.top.acked));
@@ -285,12 +270,12 @@ export class AlarmBanner implements View {
     const hw = al.hardwareTop();
     const node = hw ? this.app.plant.nodes.find((n) => n.name === hw.def.node) : this.app.plant.nodes[0];
     if (node) {
-      this.nodeBox.textContent = node.name;
-      this.nodeBox.className = 'nodebox' + (hw ? ` ${pClass(hw.def.priority)}${hw.acked ? '' : ' unack'}` : '');
-      this.commA.className = 'comm ' + (node.primaryOk ? 'ok' : 'bad');
-      this.commB.className = 'comm ' + (node.secondaryOk ? 'ok' : 'bad');
-      this.commA.title = 'Primary network';
-      this.commB.title = 'Secondary network';
+      const [a, b, c, d] = this.cells;
+      a.className = 'ns-cell ' + (node.primaryOk ? 'ok' : 'bad');
+      b.className = 'ns-cell ' + (node.secondaryOk ? 'ok' : 'bad');
+      c.className = 'ns-cell ok';
+      d.className = 'ns-cell ' + (hw ? (hw.def.priority === 'CRITICAL' ? 'bad' : 'warn') : 'ok');
+      this.nodeBtn.title = `${node.name}: primary ${node.primaryOk ? 'OK' : 'FAIL'}, secondary ${node.secondaryOk ? 'OK' : 'FAIL'}`;
     }
   }
 }

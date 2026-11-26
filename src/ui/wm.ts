@@ -42,9 +42,13 @@ export class WindowManager {
       return existing.view;
     }
     const off = (this.spawn++ % 6) * 26;
-    const title = h('div', { class: 'win-title' }, h('span', { class: 'win-name' }, o.title));
-    const close = h('button', { class: 'win-close', title: 'Close', onclick: () => this.close(o.key) }, '×');
-    title.append(close);
+    const ico = h('span', { class: 'win-ico' });
+    ico.innerHTML = '<svg viewBox="0 0 14 14" width="14" height="14"><rect x="1" y="6" width="3" height="7" fill="#2e8b57"/><rect x="5" y="2" width="3" height="11" fill="#e0a800"/><rect x="9" y="4" width="3" height="9" fill="#2b6cb0"/></svg>';
+    const title = h('div', { class: 'win-title' }, ico, h('span', { class: 'win-name' }, o.title));
+    const mini = h('button', { class: 'win-btn', title: 'Minimize', onclick: () => { el.classList.toggle('rolled'); } }, '–');
+    const maxi = h('button', { class: 'win-btn dis', title: 'Maximize', disabled: true }, '☐');
+    const close = h('button', { class: 'win-btn win-close', title: 'Close', onclick: () => this.close(o.key) }, '✕');
+    title.append(mini, maxi, close);
     const body = h('div', { class: 'win-body' }, o.view.el);
     const el = h('div', {
       class: 'win',
