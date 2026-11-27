@@ -103,12 +103,13 @@ function statusDiamonds(): { box: HTMLElement; np: HTMLElement; byp: HTMLElement
 
 const onOffClass = (p: 0 | 1 | null): string => (p === 1 ? 'on' : p === 0 ? 'off' : 'mid');
 
-export function valveGem(app: App, tag: string, x: number, y: number): Gem {
+export function valveGem(app: App, tag: string, x: number, y: number, opts: { vertical?: boolean } = {}): Gem {
   const d = app.plant.dc(tag);
   const { el, mark, setAlarm } = base(app, tag, 'gem-valve', x, y, 96, 62);
   const body = s('path', { d: 'M2 6 L26 18 L2 30 Z M50 6 L26 18 L50 30 Z', class: 'vbody' });
   const act = s('rect', { x: 19, y: 0, width: 14, height: 9, class: 'vact' });
   const svg = s('svg', { viewBox: '0 0 52 36', width: 52, height: 36 }, act, body);
+  if (opts.vertical) svg.setAttribute('style', 'transform:rotate(90deg);margin-top:12px');
   const ic = statusDiamonds();
   el.append(tagLabel(tag), h('div', { class: 'gsym' }, svg, ic.box, mark));
   return {
@@ -180,6 +181,37 @@ export function pidGem(app: App, tag: string, x: number, y: number): Gem {
       out.textContent = fmt(p.out, 1);
       mode.textContent = MODE_LETTER[p.actual] ?? p.actual;
       mode.className = `bmode m-${p.actual.toLowerCase()}${p.target !== p.actual ? ' abn' : ''}`;
+    },
+  };
+}
+
+/** Selector (ISEL-achtig symbool uit DeltaV Live): SEL-blok met modus-badge (M = manual, A = auto, O = OOS) en schakelaar naar de gekozen tak */
+export function selectorGem(app: App, tag: string, x: number, y: number, branches: [string, string] = ['Cr', 'Zg']): Gem {
+  const d = app.plant.dc(tag);
+  const { el, mark, setAlarm } = base(app, tag, 'gem-sel', x, y, 130, 86);
+  const arm = s('path', { d: 'M12 34 L40 34', class: 'selarm' });
+  const svg = s('svg', { viewBox: '0 0 56 44', width: 56, height: 44 },
+    s('path', { d: 'M2 22 H18', class: 'seldash' }),
+    s('path', { d: 'M38 8 H54 M38 36 H54', class: 'seldash' }),
+    s('circle', { cx: 18, cy: 22, r: 3, class: 'seldot' }), s('circle', { cx: 38, cy: 8, r: 3, class: 'seldot' }), s('circle', { cx: 38, cy: 36, r: 3, class: 'seldot' }),
+    arm);
+  const sel = h('span', { class: 'sel-box' }, 'SEL');
+  const mode = h('span', { class: 'sel-m' }, 'M');
+  const pos = h('div', { class: 'sel-pos' });
+  el.append(tagLabel(tag), h('div', { class: 'gsym sel-sym' }, svg, sel, mode), pos, mark);
+  const upd = () => {
+    const first = d.sp === 0; // 0 = eerste tak (Chromium)
+    arm.setAttribute('d', first ? 'M18 22 L38 8' : 'M18 22 L38 36');
+    pos.textContent = `> ${first ? branches[0] : branches[1]}`;
+  };
+  return {
+    el,
+    refresh: () => {
+      setAlarm();
+      upd();
+      mode.className = 'sel-m' + (d.target === 'OOS' ? ' oos' : '');
+      mode.textContent = d.target === 'OOS' ? 'O' : 'M';
+      el.title = `${tag} – ${d.description}\n${d.deviceState}`;
     },
   };
 }

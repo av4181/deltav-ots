@@ -1,4 +1,4 @@
-import { AnalogInput } from '../dcs/ai';
+mport { AnalogInput } from '../dcs/ai';
 import { CauseEffect } from '../dcs/ce';
 import { DiscreteDevice } from '../dcs/discrete';
 import { EquipmentModule, type EmStep } from '../dcs/em';

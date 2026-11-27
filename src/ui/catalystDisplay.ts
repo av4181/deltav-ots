@@ -1,6 +1,6 @@
 import type { App } from './app';
 import type { DisplayDef } from './displays';
-import { aiGem, controlValveGem, emGem, motorGem, pidGem, valveGem, type Gem } from './gems';
+import { aiGem, controlValveGem, emGem, motorGem, pidGem, selectorGem, valveGem, type Gem } from './gems';
 import { NumField, fmt, h, makeStage, s, toast } from './dom';
 import { penPaths, TrendChart } from './trend';
 
@@ -75,20 +75,20 @@ export const catalystDisplay: DisplayDef = {
     // Ziegler
     add(motorGem(app, 'M-3002', 140, 80));
     add(aiGem(app, 'LT-30052', 360, 100));
-    add(valveGem(app, 'KSV-30101', 262, 186));
+    add(valveGem(app, 'KSV-30101', 284, 186, { vertical: true }));
     add(valveGem(app, 'KSV-30102', 190, 254));
     add(valveGem(app, 'KSV-30103', 350, 295));
     add(aiGem(app, 'PT-30054', 200, 330));
     add(valveGem(app, 'KSV-30104', 350, 369));
-    add(valveGem(app, 'KSV-30105', 262, 430));
+    add(valveGem(app, 'KSV-30105', 284, 430, { vertical: true }));
     // Chroom
     add(aiGem(app, 'LT-30043', 670, 100));
-    add(valveGem(app, 'KSV-30111', 572, 186));
+    add(valveGem(app, 'KSV-30111', 594, 186, { vertical: true }));
     add(valveGem(app, 'KSV-30112', 510, 254));
     add(valveGem(app, 'KSV-30113', 660, 295));
     add(aiGem(app, 'PT-30044', 520, 330));
     add(valveGem(app, 'KSV-30114', 660, 369));
-    add(valveGem(app, 'KSV-30115', 572, 430));
+    add(valveGem(app, 'KSV-30115', 594, 430, { vertical: true }));
     add(valveGem(app, 'KSV-30116', 510, 364));
     // spoeling
     add(pidGem(app, 'FIC-30040', 20, 420));
@@ -120,7 +120,7 @@ export const catalystDisplay: DisplayDef = {
     add(aiGem(app, 'FT-30080', 1260, 255));
     // sequentie
     add(emGem(app, 'SEQ-3050', 520, 775));
-    add(valveGem(app, 'HS-30129', 520, 700));
+    add(selectorGem(app, 'HS-30129', 520, 690));
 
     // ---- operatorpaneel: SEQ-3050 en concentratieberekening (430KS-500C) ----
     const sp = (g: () => number, c: (v: number) => void, dec = 1, w = 54) => new NumField(g, c, { width: w, decimals: dec });
