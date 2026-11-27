@@ -25,12 +25,12 @@ export const catalystDisplay: DisplayDef = {
     const { outer, stage } = makeStage(W, H);
     const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'pid-svg' });
     // vloeistofniveaus (blauw) in de vaten
-    const fZg = s('rect', { x: 274, y: 130, width: 72, height: 36, class: 'tank-fill' });
-    const fCr = s('rect', { x: 584, y: 130, width: 72, height: 36, class: 'tank-fill' });
-    const potZ = s('rect', { x: 292, y: 350, width: 36, height: 26, class: 'tank-fill' });
-    const potC = s('rect', { x: 602, y: 350, width: 36, height: 26, class: 'tank-fill' });
-    const f9 = s('rect', { x: 664, y: 590, width: 72, height: 100, class: 'tank-fill' });
-    const f10 = s('rect', { x: 1004, y: 600, width: 52, height: 60, class: 'tank-fill' });
+    const fZg = s('rect', { x: 328, y: 130, width: 12, height: 36, class: 'tank-fill' });
+    const fCr = s('rect', { x: 638, y: 130, width: 12, height: 36, class: 'tank-fill' });
+    const potZ = s('rect', { x: 316, y: 350, width: 8, height: 26, class: 'tank-fill' });
+    const potC = s('rect', { x: 626, y: 350, width: 8, height: 26, class: 'tank-fill' });
+    const f9 = s('rect', { x: 718, y: 590, width: 12, height: 100, class: 'tank-fill' });
+    const f10 = s('rect', { x: 1036, y: 600, width: 10, height: 60, class: 'tank-fill' });
     /** roerwerk: motor boven op het vat, as, twee schoepen (paddle) onderin */
     const agit = (cx: number, top: number, bottom: number) => s('g', { class: 'agit' },
       s('rect', { x: cx - 14, y: top - 16, width: 28, height: 14, fill: '#d5dbe6', stroke: '#1b2a4a', 'stroke-width': 2 }),
