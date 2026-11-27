@@ -7,11 +7,13 @@ import { penPaths, TrendChart } from './trend';
 const pipe = (d: string, cls = ''): SVGElement => s('g', { class: `pipe ${cls}` }, s('path', { d, class: 'pipe-out' }), s('path', { d, class: 'pipe-in' }));
 const lab = (x: number, y: number, t: string, cls = 'glabel', anchor = 'start'): SVGElement => s('text', { x, y, class: cls, 'text-anchor': anchor }, t);
 
+const V = (x: number, y: number, w: number, hgt: number, cls = 'vessel'): SVGElement => s('rect', { x, y, width: w, height: hgt, rx: 14, class: cls });
+
 export const catalystDisplay: DisplayDef = {
   id: 'CAT',
   nav: 'CATALYST FEED',
-  title: 'Catalyst Feed & Interface',
-  revisions: ['REV.1  26-11-26'],
+  title: 'Catalyst Feed & Interface – Chromium / Ziegler',
+  revisions: ['REV.2  27-11-26'],
   unit: 'CATALYST',
   site: 'CATALYST',
   level: 2,
@@ -19,128 +21,155 @@ export const catalystDisplay: DisplayDef = {
   build(app) {
     const cat = app.cat;
     const P = cat.process;
-    const { outer, stage } = makeStage(1180, 630);
-    const svg = s('svg', { viewBox: '0 0 1180 640', width: 1180, height: 640, class: 'pid-svg' });
-    const fill9 = s('rect', { x: 454, y: 160, width: 62, height: 200, class: 'tank-fill' });
-    const fillZg = s('rect', { x: 52, y: 62, width: 38, height: 70, class: 'tank-fill' });
-    const fillCr = s('rect', { x: 152, y: 62, width: 38, height: 70, class: 'tank-fill' });
-    const potFill = s('rect', { x: 292, y: 262, width: 36, height: 84, class: 'tank-fill' });
-    const v10 = s('rect', { x: 760, y: 300, width: 40, height: 60, class: 'tank-fill' });
+    const W = 1440, H = 830;
+    const { outer, stage } = makeStage(W, H);
+    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'pid-svg' });
+    // vloeistofniveaus (blauw) in de vaten
+    const fZg = s('rect', { x: 274, y: 130, width: 72, height: 36, class: 'tank-fill' });
+    const fCr = s('rect', { x: 584, y: 130, width: 72, height: 36, class: 'tank-fill' });
+    const potZ = s('rect', { x: 292, y: 350, width: 36, height: 26, class: 'tank-fill' });
+    const potC = s('rect', { x: 602, y: 350, width: 36, height: 26, class: 'tank-fill' });
+    const f9 = s('rect', { x: 664, y: 590, width: 72, height: 100, class: 'tank-fill' });
+    const f10 = s('rect', { x: 1004, y: 600, width: 52, height: 60, class: 'tank-fill' });
+    const agit = (cx: number, y: number) => s('g', { class: 'agit' }, s('path', { d: `M ${cx} ${y - 22} L ${cx} ${y + 28} M ${cx - 16} ${y + 28} L ${cx + 16} ${y + 28}`, class: 'sigline' }));
     svg.append(
-      // day tanks
-      s('rect', { x: 50, y: 60, width: 42, height: 74, class: 'vessel' }), fillZg, lab(71, 52, 'V-3005 Zg', 'glabel b', 'middle'),
-      s('rect', { x: 150, y: 60, width: 42, height: 74, class: 'vessel' }), fillCr, lab(171, 52, 'V-3007 Cr', 'glabel b', 'middle'),
-      pipe('M 71 134 L 71 200 L 310 200 L 310 258'),
-      pipe('M 171 134 L 171 220 L 310 220'),
-      // charge pot
-      s('rect', { x: 290, y: 260, width: 40, height: 88, class: 'vessel' }), potFill, lab(284, 258, 'Charge pot', 'glabel b', 'end'),
-      pipe('M 310 348 L 310 400 L 485 400 L 485 360'),
-      pipe('M 310 150 L 310 258'), lab(318, 146, 'LIR', 'glabel'),
-      pipe('M 310 230 L 380 230 L 380 160'),
-      // V-3009
-      s('path', { d: 'M450 190 Q450 160 485 160 Q520 160 520 190 L520 340 Q520 362 485 362 Q450 362 450 340 Z', class: 'vessel' }),
-      s('rect', { x: 454, y: 190, width: 62, height: 150, class: 'tank-glass' }), fill9,
-      lab(440, 180, 'V-3009', 'glabel b', 'end'),
-      // N2 / vent
-      pipe('M 485 160 L 485 110 L 620 110'), lab(626, 114, 'N2 / vent', 'glabel'),
-      // slurry to V-3010
-      pipe('M 520 330 L 740 330 L 760 330'),
-      // V-3010
-      s('rect', { x: 758, y: 298, width: 44, height: 64, class: 'vessel' }), v10, lab(780, 290, 'V-3010', 'glabel b', 'middle'),
-      pipe('M 780 362 L 780 440 L 900 440'),
-      pipe('M 900 440 L 900 470 L 960 470'), pipe('M 900 440 L 900 540 L 960 540'),
-      lab(1062, 482, 'To R-3001', 'glabel'), lab(1062, 552, 'To R-3002', 'glabel'),
-      // LIR dilution
-      pipe('M 620 250 L 780 250 L 780 298'), lab(626, 244, 'LIR dilution', 'glabel'),
-      // signal lines
-      s('path', { d: 'M 520 250 L 560 250', class: 'sigline' }),
+      // --- Ziegler: dagtank V-3005 + charge pot ---
+      lab(20, 44, 'Zg cat drums', 'glabel'), pipe('M 20 52 L 310 52 L 310 66'),
+      V(270, 66, 80, 110), fZg, agit(310, 108), lab(358, 78, 'V-3005 Zg day tank', 'glabel b'),
+      pipe('M 310 176 L 310 312'),
+      V(290, 312, 40, 68), potZ, lab(300, 306, 'Zg charge pot', 'glabel', 'end'),
+      pipe('M 170 285 L 310 285'), pipe('M 330 326 L 446 326'), lab(452, 330, 'N2'),
+      pipe('M 310 380 L 310 400 L 446 400'), lab(452, 404, 'S-3003'),
+      pipe('M 310 400 L 310 510 L 700 510 L 700 560'),
+      // --- Chroom: dagtank V-3007 + charge pot ---
+      lab(700, 44, 'Cr cat drums', 'glabel'), pipe('M 790 52 L 620 52 L 620 66'),
+      V(580, 66, 80, 110), fCr, lab(668, 78, 'V-3007 Cr day tank', 'glabel b'),
+      pipe('M 620 176 L 620 312'),
+      V(600, 312, 40, 68), potC, lab(610, 306, 'Cr charge pot', 'glabel', 'end'),
+      pipe('M 500 285 L 620 285'), pipe('M 640 326 L 756 326'), lab(762, 330, 'N2'),
+      pipe('M 620 380 L 620 400 L 756 400'), lab(762, 404, 'S-3003'),
+      pipe('M 500 395 L 620 395'),
+      pipe('M 620 400 L 620 510'),
+      // --- LIR spoeling (FV-30040) ---
+      lab(20, 505, 'LIR (from LIR cooler)', 'glabel'),
+      pipe('M 20 560 L 500 560 L 500 285'), pipe('M 170 560 L 170 285'), pipe('M 500 395 L 500 560'),
+      // --- V-3009 ---
+      V(660, 560, 80, 150), f9, agit(700, 590), lab(700, 552, 'V-3009', 'glabel b', 'middle'),
+      pipe('M 700 710 L 700 760'), lab(812, 750, 'dump to S-3003'),
+      // --- slurry naar V-3010 ---
+      pipe('M 740 670 L 1000 670'),
+      V(1000, 560, 60, 140), f10, lab(1030, 552, 'V-3010', 'glabel b', 'middle'),
+      pipe('M 1030 700 L 1030 740 L 1085 740'), pipe('M 1030 740 L 1030 690'),
+      pipe('M 1190 690 L 1230 690'), pipe('M 1190 765 L 1230 765'), lab(1340, 694, 'To R-3001'), lab(1340, 769, 'To R-3002'),
+      // --- LIR verdunning ---
+      lab(1370, 478, 'LIR', 'glabel'), pipe('M 1360 470 L 1030 470 L 1030 560'),
+      // --- S-3003 (afval) ---
+      s('path', { d: 'M 1000 60 L 1080 60 L 1080 150 L 1040 190 L 1000 150 Z', class: 'vessel' }), lab(1040, 52, 'S-3003 waste catalyst filter', 'glabel b', 'middle'),
+      lab(1090, 112, '← from vents / dump / KSV', 'glabel'),
+      s('path', { d: 'M 740 440 L 760 440', class: 'sigline' }),
     );
     stage.append(svg);
 
     const gems: Gem[] = [];
     const add = (g: Gem) => { gems.push(g); stage.append(g.el); };
-    add(aiGem(app, 'LT-30005', 20, 140));
-    add(aiGem(app, 'LT-30007', 120, 140));
-    add(valveGem(app, 'XV-30050', 14, 205));
-    add(valveGem(app, 'XV-30051', 114, 225));
-    add(valveGem(app, 'XV-30052', 240, 150));
-    add(valveGem(app, 'XV-30053', 205, 300));
-    add(valveGem(app, 'XV-30054', 330, 405));
-    add(valveGem(app, 'XV-30055', 380, 175));
-    add(valveGem(app, 'XV-30056', 240, 360));
-    add(valveGem(app, 'XV-30057', 540, 365));
-    add(aiGem(app, 'LT-30060', 535, 180));
-    add(aiGem(app, 'PT-30060', 500, 40));
-    add(aiGem(app, 'DI-30060', 535, 270));
-    add(motorGem(app, 'M-3009', 375, 290));
-    add(aiGem(app, 'FT-30060', 590, 340));
-    add(controlValveGem(app, 'FIC-30060', 665, 290, { label: 'FV-30060', pos: () => app.cat.plant.pid('FIC-30060').out }));
-    add(pidGem(app, 'FIC-30060', 590, 400));
-    add(pidGem(app, 'FIC-30050', 590, 470));
-    add(pidGem(app, 'PIC-30060', 720, 40));
-    add(aiGem(app, 'FT-30061', 800, 205));
-    add(controlValveGem(app, 'FIC-30061', 705, 190, { label: 'FV-30061', pos: () => app.cat.plant.pid('FIC-30061').out }));
-    add(pidGem(app, 'FIC-30061', 820, 130));
-    add(valveGem(app, 'XV-30062', 880, 260));
-    add(aiGem(app, 'PT-30010', 810, 345));
-    add(pidGem(app, 'PIC-30010', 880, 345));
-    add(motorGem(app, 'P-3008A', 790, 450));
-    add(motorGem(app, 'P-3008B', 790, 520));
-    add(valveGem(app, 'XV-30061', 960, 440));
-    add(valveGem(app, 'XV-30063', 960, 510));
-    add(aiGem(app, 'FT-30080', 1010, 380));
-    add(pidGem(app, 'FIC-30080', 1010, 300));
-    add(aiGem(app, 'FT-30081', 1010, 590));
-    add(emGem(app, 'SEQ-3050', 20, 392));
-    add(valveGem(app, 'HS-30129', 530, 450));
+    // Ziegler
+    add(motorGem(app, 'M-3002', 140, 80));
+    add(aiGem(app, 'LT-30052', 360, 100));
+    add(valveGem(app, 'KSV-30101', 262, 186));
+    add(valveGem(app, 'KSV-30102', 190, 254));
+    add(valveGem(app, 'KSV-30103', 350, 295));
+    add(aiGem(app, 'PT-30054', 200, 330));
+    add(valveGem(app, 'KSV-30104', 350, 369));
+    add(valveGem(app, 'KSV-30105', 262, 430));
+    // Chroom
+    add(aiGem(app, 'LT-30043', 670, 100));
+    add(valveGem(app, 'KSV-30111', 572, 186));
+    add(valveGem(app, 'KSV-30112', 510, 254));
+    add(valveGem(app, 'KSV-30113', 660, 295));
+    add(aiGem(app, 'PT-30044', 520, 330));
+    add(valveGem(app, 'KSV-30114', 660, 369));
+    add(valveGem(app, 'KSV-30115', 572, 430));
+    add(valveGem(app, 'KSV-30116', 510, 364));
+    // spoeling
+    add(pidGem(app, 'FIC-30040', 20, 420));
+    add(aiGem(app, 'FT-30040', 20, 360));
+    add(controlValveGem(app, 'FIC-30040', 100, 520, { label: 'FV-30040', pos: () => app.cat.plant.pid('FIC-30040').out }));
+    // V-3009
+    add(motorGem(app, 'M-3003', 545, 585));
+    add(aiGem(app, 'LT-30060', 770, 500));
+    add(aiGem(app, 'DI-30060', 770, 555));
+    add(aiGem(app, 'PT-30060', 770, 440));
+    add(pidGem(app, 'PIC-30060', 920, 430));
+    add(valveGem(app, 'XV-30057', 715, 712));
+    add(aiGem(app, 'FT-30060', 750, 610));
+    add(controlValveGem(app, 'FIC-30060', 885, 628, { label: 'FV-30060', pos: () => app.cat.plant.pid('FIC-30060').out }));
+    add(pidGem(app, 'FIC-30060', 775, 700));
+    add(pidGem(app, 'FIC-30050', 925, 700));
+    // V-3010, pompen, reactoren
+    add(aiGem(app, 'PT-30010', 1075, 575));
+    add(pidGem(app, 'PIC-30010', 1230, 545));
+    add(aiGem(app, 'FT-30061', 1090, 380));
+    add(controlValveGem(app, 'FIC-30061', 1110, 440, { label: 'FV-30061', pos: () => app.cat.plant.pid('FIC-30061').out }));
+    add(pidGem(app, 'FIC-30061', 1230, 380));
+    add(valveGem(app, 'XV-30062', 1260, 438));
+    add(motorGem(app, 'P-3008A', 1090, 650));
+    add(motorGem(app, 'P-3008B', 1090, 730));
+    add(valveGem(app, 'XV-30061', 1230, 650));
+    add(valveGem(app, 'XV-30063', 1230, 725));
+    add(pidGem(app, 'FIC-30080', 1260, 160));
+    add(aiGem(app, 'FT-30080', 1260, 255));
+    // sequentie
+    add(emGem(app, 'SEQ-3050', 520, 775));
+    add(valveGem(app, 'HS-30129', 520, 700));
 
-    // ---- operatorpaneel: SEQ-3050 en concentratieberekening ----
-    const sp = (g: () => number, c: (v: number) => void, dec = 1, w = 56) => new NumField(g, c, { width: w, decimals: dec });
-    const concSp = sp(() => cat.calc.concSp, (v) => { cat.calc.concSp = Math.max(0.5, Math.min(10, v)); });
-    const initConc = sp(() => cat.calc.conc(cat.plant.ai('LT-30060').pv), (v) => {
-      cat.calc.init(Math.max(0, v), cat.plant.ai('LT-30060').pv);
-      app.logInstructor('SEQ-3050C INIT CONC', v);
-    }, 2);
-    const lowLv = sp(() => cat.lowLevelSp.value, (v) => { cat.lowLevelSp.value = v; });
-    const hiLv = sp(() => cat.highLevelSp.value, (v) => { cat.highLevelSp.value = v; });
-    const run = (cmd: string) => () => { const r = cat.seq.run(cmd); if (!r.ok) toast(r.reason ?? 'Not accepted', 'error'); };
+    // ---- operatorpaneel: SEQ-3050 en concentratieberekening (430KS-500C) ----
+    const sp = (g: () => number, c: (v: number) => void, dec = 1, w = 54) => new NumField(g, c, { width: w, decimals: dec });
+    const concSp = sp(() => cat.calc.concSp, (v) => { cat.calc.concSp = Math.max(0.5, Math.min(30, v)); });
+    const initConc = sp(() => cat.calc.conc(cat.plant.ai('LT-30060').pv), (v) => { cat.calc.init(Math.max(0, v), cat.plant.ai('LT-30060').pv); app.logInstructor('SEQ-3050C INIT CONC', v); }, 2);
+    const lvStart = sp(() => cat.par.levelStart, (v) => { cat.par.levelStart = v; }, 0, 40);
+    const lvMax = sp(() => cat.par.levelMax, (v) => { cat.par.levelMax = v; }, 0, 40);
+    const flushSp = sp(() => cat.par.flushSp, (v) => { cat.par.flushSp = v; }, 0, 56);
+    const undConc = sp(() => cat.calc.undConc, (v) => { cat.calc.undConc = v; }, 0, 48);
+    const run = (c: string) => () => { if (!cat.startSeq(c)) toast('A command is already running – Stop first', 'error'); };
     const typeTxt = h('b', {});
-    const live = {
-      est: h('span', {}), tru: h('span', {}), pure: h('span', {}), pot: h('span', {}), step: h('span', {}),
-    };
+    const live = { step: h('span', {}), est: h('span', {}), pure: h('span', {}), mode: h('span', {}) };
+    const calcFrozen = h('input', { type: 'checkbox', onchange: () => { cat.calc.frozen = calcFrozen.checked; } });
     const panel = h('div', { class: 'cat-panel' },
-      h('div', { class: 'cat-title' }, 'SEQ-3050  Catalyst transfer'),
-      h('div', { class: 'cat-row' }, 'Catalyst type (HS-30129):', typeTxt),
-      h('div', { class: 'cat-row' }, h('button', { class: 'ots-btn', onclick: run('SEQ-3050B (Zg)') }, 'Start Zg'), h('button', { class: 'ots-btn', onclick: run('SEQ-3050A (Cr)') }, 'Start Cr'), h('button', { class: 'ots-btn', onclick: run('ABORT') }, 'Abort'), h('button', { class: 'ots-btn', onclick: () => cat.seq.restart() }, 'Restart')),
-      h('div', { class: 'cat-row' }, 'Start <', lowLv.el, '%  High', hiLv.el, '%  Conc SP', concSp.el, 'INIT CONC', initConc.el, 'kg/m³'),
+      h('div', { class: 'cat-title' }, 'SEQ-3050  Catalyst transfer (A = Cr, B = Zg, C = concentration)'),
+      h('div', { class: 'cat-row' }, 'CAT_SEL (HS-30129):', typeTxt, live.mode),
+      h('div', { class: 'cat-row' },
+        h('button', { class: 'ots-btn', onclick: run('SEQ-3050B (Zg)') }, 'Run 3050B Zg'), h('button', { class: 'ots-btn', onclick: run('SEQ-3050A (Cr)') }, 'Run 3050A Cr'),
+        h('button', { class: 'ots-btn', onclick: () => cat.stopSeq() }, 'Stop'), h('button', { class: 'ots-btn', onclick: () => { cat.seq.restart(); cat.repeat.on = true; } }, 'Restart step')),
+      h('div', { class: 'cat-row' }, 'level_start', lvStart.el, '%  level_max', lvMax.el, '%  flush F', flushSp.el, 'kg/h'),
+      h('div', { class: 'cat-row' }, 'SP:Cat_Conc', concSp.el, ' INIT CONC', initConc.el, 'kg/m³  Und', undConc.el, ' manual', calcFrozen),
       h('div', { class: 'cat-row' }, 'Step:', live.step),
-      h('div', { class: 'cat-row' }, 'DCS conc.', live.est, 'kg/m³  ·  pure flow est.', live.pure, 'kg/h'),
-      h('div', { class: 'cat-row dim' }, 'Charge pot:', live.pot),
+      h('div', { class: 'cat-row' }, 'PV:Cat_Conc', live.est, 'kg/m³ · pure flow est.', live.pure, 'kg/h'),
     );
-    panel.style.cssText = 'position:absolute;left:10px;top:452px;width:500px;';
+    panel.style.cssText = 'position:absolute;left:10px;top:625px;width:500px;';
     stage.append(panel);
-    const fields = [concSp, initConc, lowLv, hiLv];
+    const fields = [concSp, initConc, lvStart, lvMax, flushSp, undConc];
 
     return {
       el: outer,
       gems,
       update: () => {
-        const set = (r: SVGElement, base: number, hh: number, pct: number) => {
-          const v = Math.max(0, Math.min(1, pct));
+        const set = (r: SVGElement, base: number, hh: number, frac: number) => {
+          const v = Math.max(0, Math.min(1, frac));
           r.setAttribute('y', String(base - hh * v));
           r.setAttribute('height', String(hh * v));
         };
-        set(fill9, 340, 150, P.level / 100);
-        set(fillZg, 134, 74, P.zgLevel / 100);
-        set(fillCr, 134, 74, P.crLevel / 100);
-        set(potFill, 346, 84, P.potLoad > 0 ? Math.min(1, P.potLiq / Math.max(P.potLoad, 1e-9)) : 0);
-        set(v10, 360, 60, Math.max(0, (P.p10 - 3) / 6));
+        set(fZg, 176, 110, P.zgLevel / 100);
+        set(fCr, 176, 110, P.crLevel / 100);
+        set(potZ, 380, 68, P.zgPot.liq / P.zgPot.vol);
+        set(potC, 380, 68, Math.max(P.crPot.cata / (P.crPot.vol * 200), P.crPot.liq / P.crPot.vol));
+        set(f9, 710, 150, P.level / 100);
+        set(f10, 700, 140, Math.max(0, (P.p10 - 3) / 6));
         typeTxt.textContent = ' ' + (cat.dc['HS-30129'].sp === 1 ? 'ZIEGLER' : 'CHROMIUM');
+        live.mode.textContent = cat.repeat.on ? `  · RUN (${cat.repeat.cmd})` : '  · STOP';
         const stp = cat.seq.stepLabels.find((x) => x.status === 'active' || x.status === 'failed');
-        live.step.textContent = ` ${cat.seq.state}${stp ? ' – ' + stp.label : ''}`;
+        live.step.textContent = ` ${cat.seq.state === 'Failed' ? 'HELD' : cat.seq.state}${stp ? ' – ' + stp.label : ''}${cat.seq.state === 'Failed' ? ' · ' + cat.seq.errorText : ''}`;
         live.est.textContent = fmt(cat.calc.conc(cat.plant.ai('LT-30060').pv), 2);
         live.pure.textContent = fmt(cat.pureEstimate(), 2);
-        live.pot.textContent = ` ${fmt(P.potLiq * 1000, 1)} L liquid / ${fmt(P.potCata, 2)} kg cata`;
         fields.forEach((f) => f.refresh());
       },
     };
@@ -197,6 +226,7 @@ export const catalystTrends: DisplayDef = {
       { title: 'V-3009  (LT-30060, DI-30060)', mods: ['LT-30060', 'DI-30060'] },
       { title: 'Slurry / pure catalyst flow  (FIC-30060, FIC-30050)', mods: ['FIC-30060', 'FIC-30050'] },
       { title: 'Pressures  (PT-30060, PT-30010)', mods: ['PT-30060', 'PT-30010'] },
+      { title: 'Charge pots / flush  (PT-30044, PT-30054, FT-30040)', mods: ['PT-30044', 'PT-30054', 'FT-30040'] },
     ];
     const charts = groups.map((g) => new TrendChart(app, g.mods.flatMap((m) => penPaths(app, m)), { axes: true, height: 150, span: 600 }));
     const el = h('div', { class: 'trend-display' }, ...groups.map((g, i) => h('div', { class: 'trend-panel' }, h('div', { class: 'trend-title' }, g.title), charts[i].el)));
