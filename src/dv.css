@@ -281,3 +281,15 @@ button { font-family: inherit; }
 .sel-pos { font-size: 11px; font-weight: 600; margin-top: 2px; }
 .cat-prompt { background:#fff3cd; border:1px solid #b58900; padding:4px 6px; margin:3px 0; color:#4a3500; }
 .cat-prompt.hidden { display:none; }
+
+/* ---- reactoren / co-catalyst ---- */
+.pid-svg .navlink { cursor: pointer; }
+.pid-svg text.navlink { fill: #1f5fa8; text-decoration: underline; }
+.pid-svg .rx-outer { fill: #b6c7d8; stroke: #5d7390; stroke-width: 3; }
+.pid-svg .rx-inner { fill: var(--bg, #d8dfec); stroke: #5d7390; stroke-width: 2; }
+.pid-svg .rx-loop:hover .rx-outer { fill: #9fb6cc; }
+.pid-svg .jacket { fill: #9fc3e0; stroke: #3f6c93; stroke-width: 2; }
+.pid-svg .zone { fill: rgba(120,130,150,.12); stroke: #8a94a0; stroke-width: 2; }
+.pid-svg .oos-mark { font: 700 64px 'Segoe UI', Arial; fill: rgba(90,100,120,.35); }
+.pid-svg .oos-mark.hidden { display: none; }
+.pid-svg .glabel.dim { fill: #55607a; font-weight: 500; font-size: 11px; }

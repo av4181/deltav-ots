@@ -1,6 +1,7 @@
 import type { App } from './app';
 import { fmt, h, makeStage, s } from './dom';
 import { aiGem, controlValveGem, emGem, motorGem, pidGem, valveGem, type Gem } from './gems';
+import { cocatDisplay, reactor1Display, reactor2Display, reactorOverview } from './reactorDisplays';
 import { catalystCE, catalystDisplay, catalystTrends } from './catalystDisplay';
 import { penPaths, TrendChart } from './trend';
 
@@ -136,8 +137,8 @@ const overview: DisplayDef = {
   revisions: [],
   level: 1,
   build(app) {
-    const tiles: { id: string; label: string; unit?: string; el: HTMLElement }[] = [];
-    const tile = (id: string, label: string, x: number, y: number, unit?: string) => {
+    const tiles: { id: string; label: string; unit?: string | string[]; el: HTMLElement }[] = [];
+    const tile = (id: string, label: string, x: number, y: number, unit?: string | string[]) => {
       const el = h('button', { class: 'ov-tile', style: `left:${x}px;top:${y}px`, disabled: !DISPLAYS.some((d) => d.id === id), onclick: () => app.showDisplay(id) }, label);
       tiles.push({ id, label, unit, el });
       return el;
@@ -147,13 +148,16 @@ const overview: DisplayDef = {
       h('div', { class: 'ov-title' }, 'PLANT OVERVIEW'),
       tile('T101', 'TANK101', 120, 160, 'TANK101'),
       tile('CAT', 'CATALYST FEED', 320, 160, 'CATALYST'),
+      tile('COCAT', 'CO-CATALYST', 520, 160, 'COCAT'),
+      tile('REACT', 'REACTORS', 720, 160, ['R3001', 'R3002', 'INTERM']),
     );
     return {
       el: outer,
       gems: [],
       update: () => {
         for (const t of tiles) {
-          const r = t.unit ? app.alarms.rollup(new Set(app.plantOfUnit(t.unit)?.units.find((u) => u.tag === t.unit)?.modules ?? [])) : { top: null, count: 0, unacked: false };
+          const us = t.unit ? ([] as string[]).concat(t.unit) : [];
+          const r = us.length ? app.alarms.rollup(new Set(us.flatMap((tag) => app.plantOfUnit(tag)?.units.find((u) => u.tag === tag)?.modules ?? []))) : { top: null, count: 0, unacked: false };
           t.el.className = 'ov-tile' + (r.top ? ` p-${r.top.toLowerCase()}` : '') + (r.unacked ? ' unack' : '');
         }
       },
@@ -161,6 +165,6 @@ const overview: DisplayDef = {
   },
 };
 
-export const DISPLAYS: DisplayDef[] = [overview, tank101, trends, catalystDisplay, catalystCE, catalystTrends];
+export const DISPLAYS: DisplayDef[] = [overview, tank101, trends, catalystDisplay, catalystCE, catalystTrends, cocatDisplay, reactorOverview, reactor1Display, reactor2Display];
 export const DISPLAY_SET = { name: 'MainProcess', home: 'OVERVIEW' };
 export const displayChildren = (id: string): DisplayDef[] => DISPLAYS.filter((d) => d.parent === id);

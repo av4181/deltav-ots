@@ -66,3 +66,11 @@ Motor Control, Regulatory Control, Trending, Cascade, Unit Alarms, Equipment Mod
 - Tags: FV/FT/LT/FIC-30060, XV-30061/62/63, HS-30129, SEQ-3050, I-3001/I-3002, S-3012-3, P-3008A/B, M-3002/M-3003 uit de Ineos-documenten; KSV-301xx (= 430KSV1xx), LT-30043/52, PT-30044/54, FIC-30040 uit het Technip-sequentiedoc zonder het cijfer 4; overige (PIC-30010, PT-30060, DI-30060, XV-30057, TEA) zijn **OTS-toewijzingen** → verifiëren met de P&ID.
 - Aannames/vereenvoudigingen: pompcapaciteit 3,2 m³/h (Ineos: ~1500 kg/h bij normale LIR); CAT_SEL heeft 2 standen (Bimodal Ziegler niet apart); één LIR-spoelkring; vereenvoudigde TEA; S-3003/V-3011 alleen als sink; **C&E-matrix zelf gereconstrueerd** (controleer met HZS_30132/30240); concentratie-instelpunt 2,5 kg/m³ volgens licensing-scherm (Ineos-bedrijfsvenster 4–20 g/L).
 - Toolbar-iconen en Silver-thema aangepast (tweekleurige iconen, donkere OTS-balk, vlakke tabs, vierkante badges, tabular-nums).
+
+## v0.5 – Co-catalyst en reactoren (alleen graphics)
+- Nieuwe displays (site CATALYST): `COCAT` (Co-Catalyst Systems), `REACT` (R-3001/R-3002 + Intermediate Treatment), `REACT1` / `REACT2` (detail, niveau 3; opent door op de reactor te klikken).
+- Modules staan in `src/scenarios/hdpeStatic.ts`: **statische** waarden (constant + ruis, PID's volgen SP). Nog geen procesgedrag.
+- Tags zijn afgeleid van de slides (430xxx → 30xxx, 43xxx → 3xxx) en moeten tegen de P&ID gecontroleerd worden.
+- HS-30500 (Intermediate Treatment) staat standaard "in service"; de R-3002 katalysator- en co-katalysatorvoeding staat standaard dicht.
+- Alarmrollup op tegel/tab werkt nu over meerdere units (`unit?: string | string[]`).
+- Links: reactor → detail, "Catalyst" → CAT, "Co-catalyst" → COCAT, "To R-300x" → detail.

@@ -5,6 +5,7 @@ import { EquipmentModule, type EmStep } from '../dcs/em';
 import { Pid } from '../dcs/pid';
 import { Plant } from '../dcs/plant';
 import { CataCalc, CatalystProcess, RHO_LIR, type CataType, type PotValves } from './catalystProcess';
+import { addStaticSections } from './hdpeStatic';
 import { MOTOR_CFG, SELECTOR_CFG, VALVE_CFG } from './dcCfg';
 
 export const CATALYST_UNIT = 'CATALYST';
@@ -371,6 +372,7 @@ export function buildCatalyst(seed = 7): Catalyst {
     reg(p.tag, `${p.tag}/PID1/SP.CV`, 'SP', p.eu, p.lo, p.hi, () => p.sp);
     reg(p.tag, `${p.tag}/PID1/OUT.CV`, 'OUT', '%', 0, 100, () => p.out);
   }
+  addStaticSections(plant, dc, { tea1: ft80, tea2: ft81 });
   // inschakel-transiënt van de AI-filters uitlopen zodat de simulator in stationaire toestand start
   for (let i = 0; i < 240; i++) plant.tick(0.5);
   plant.alarms.alarms.clear();

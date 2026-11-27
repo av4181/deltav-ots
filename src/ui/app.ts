@@ -544,7 +544,7 @@ export class App {
       const mods = new Set<string>();
       const collect = (did: string) => {
         const d = DISPLAYS.find((x) => x.id === did);
-        const u = this.plant.units.find((x) => x.tag === d?.unit);
+        const u = d?.unit ? this.plantOfUnit(d.unit)?.units.find((x) => x.tag === d.unit) : undefined;
         u?.modules.forEach((m) => mods.add(m));
         displayChildren(did).forEach((k) => collect(k.id));
       };
