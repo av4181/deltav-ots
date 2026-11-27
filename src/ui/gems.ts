@@ -184,7 +184,7 @@ export function pidGem(app: App, tag: string, x: number, y: number): Gem {
   };
 }
 
-export function controlValveGem(app: App, tag: string, x: number, y: number): Gem {
+export function controlValveGem(app: App, tag: string, x: number, y: number, opts: { label?: string; pos?: () => number } = {}): Gem {
   const p = app.plant.pid(tag);
   const { el } = base(app, tag, 'gem-cv', x, y, 96, 78);
   el.draggable = false;
@@ -194,13 +194,13 @@ export function controlValveGem(app: App, tag: string, x: number, y: number): Ge
   const fail = s('text', { x: 26, y: 15, 'text-anchor': 'middle', class: 'vtxt' }, 'FC');
   const svg = s('svg', { viewBox: '0 0 52 50', width: 52, height: 50 }, stem, dome, fail, body);
   const pos = h('div', { class: 'gpos' });
-  el.append(tagLabel('FCV-102'), h('div', { class: 'gsym' }, svg), pos);
-  el.title = 'Control valve FCV-102 (operated by FIC-102)';
+  el.append(tagLabel(opts.label ?? 'FCV-102'), h('div', { class: 'gsym' }, svg), pos);
+  el.title = `Control valve ${opts.label ?? 'FCV-102'} (operated by ${tag})`;
   el.addEventListener('click', () => app.openFaceplate(p.tag));
   return {
     el,
     refresh: () => {
-      const v = app.t.process.fcvPos;
+      const v = opts.pos ? opts.pos() : app.t.process.fcvPos;
       pos.textContent = `${fmt(v, 1)} %`;
       body.setAttribute('style', `fill:rgb(${Math.round(200 - 1.6 * v)},${Math.round(200 - 1.6 * v)},${Math.round(200 - 1.6 * v)})`);
     },

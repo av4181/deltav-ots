@@ -1,5 +1,7 @@
 import { CREDENTIALS } from '../config';
 import { ScenarioEngine } from '../scenarios/engine';
+import { buildCatalyst, type Catalyst } from '../scenarios/catalyst';
+import type { Plant } from '../dcs/plant';
 import { buildTank101, type InitState, type Tank101 } from '../scenarios/tank101';
 import { fmtDateTime, fmtTime } from '../dcs/clock';
 import { AlarmBanner, buildAlarmHelp, buildAlarmList, buildAreaFilter, buildDiagnostics, buildUnitFaceplate } from './alarmUi';
@@ -20,6 +22,8 @@ export type Privilege = 'shelve' | 'areafilter' | 'helpedit' | 'bypass';
 export class App {
   readonly root: HTMLElement;
   t!: Tank101;
+  cat!: Catalyst;
+  site: 'TANK101' | 'CATALYST' = 'TANK101';
   role: Role = 'OPERATOR';
   speed = 1;
   paused = false;
@@ -57,8 +61,11 @@ export class App {
     this.startLoop();
   }
 
-  get plant() { return this.t.plant; }
-  get alarms() { return this.t.plant.alarms; }
+  get plant(): Plant { return this.site === 'CATALYST' ? this.cat.plant : this.t.plant; }
+  get alarms() { return this.plant.alarms; }
+  plantOfUnit(unit?: string): Plant | undefined {
+    return [this.t.plant, this.cat.plant].find((p) => p.units.some((u) => u.tag === unit));
+  }
 
   /** Supervisor en instructeur hebben de extra privileges (shelving, bypass, area filtering, help bewerken). */
   can(_p: Privilege): boolean {
@@ -136,6 +143,8 @@ export class App {
     this.wm.closeAll();
     this.flags.clear();
     this.t = buildTank101(init);
+    this.cat = buildCatalyst();
+    this.cat.plant.user = this.role;
     this.plant.user = this.role;
     this.renderShell();
     this.refresh();
@@ -302,6 +311,8 @@ export class App {
       this.navHistory = [def.id];
       this.navPos = 0;
     }
+    if (def.site && def.site !== this.site) this.setSite(def.site);
+    else if (!def.site && def.id !== 'OVERVIEW' && this.site !== 'TANK101') this.setSite('TANK101');
     this.displayId = def.id;
     this.graphic?.dispose?.();
     clear(this.graphicHost);
@@ -310,6 +321,12 @@ export class App {
     this.graphicHost.append(this.graphic.el);
     this.flags.add(`opened:display:${def.id}`);
     this.refresh();
+  }
+  private setSite(site: 'TANK101' | 'CATALYST'): void {
+    this.site = site;
+    this.watchTags = new Set(site === 'CATALYST' ? ['LT-30060', 'FIC-30060'] : ['LI-101', 'FIC-102']);
+    this.renderWatchArea();
+    this.instructorDrawer?.replaceWith(this.instructorDrawer = this.buildInstructorDrawer());
   }
   private navUp(): void {
     const d = DISPLAYS.find((x) => x.id === this.displayId);
@@ -353,6 +370,7 @@ export class App {
 
   private buildInstructorDrawer(): HTMLElement {
     const p = this.t.process;
+    const cp = this.cat.process;
     const slider = (label: string, min: number, max: number, step: number, get: () => number, set: (v: number) => void, unit = '') => {
       const valLbl = h('span', { class: 'v' }, `${get()}${unit}`);
       const inp = h('input', {
@@ -386,6 +404,33 @@ export class App {
       return h('div', { class: 'kv' }, h('span', { class: 'k' }, `${tag} Transmitter Fault`), sel);
     };
 
+    if (this.site === 'CATALYST') {
+      const c = this.cat;
+      const dc = c.dc;
+      const faultSel = (tag: string) => {
+        const ai = c.plant.ai(tag);
+        const sel = h('select', { onchange: () => { ai.setFault(sel.value as 'NONE' | 'BAD' | 'FROZEN' | 'DRIFT'); this.logInstructor(`${tag} transmitter fault`, sel.value); } },
+          ...(['NONE', 'BAD', 'FROZEN', 'DRIFT'] as const).map((f) => h('option', { value: f, selected: ai.fault === f }, f)));
+        return h('div', { class: 'kv' }, h('span', { class: 'k' }, `${tag} Transmitter Fault`), sel);
+      };
+      return h('aside', { class: 'inst-drawer' },
+        h('div', { class: 'watch-head' }, 'INSTRUCTOR STATION – catalyst malfunctions'),
+        h('div', { class: 'inst-body' },
+          slider('Charge pot actual fill (1 = as assumed by DCS)', 0.5, 1, 0.05, () => cp.fillActual, (v) => (cp.fillActual = v)),
+          slider('DCS assumed pot fill factor', 0.5, 1.2, 0.05, () => c.calc.fillFactor, (v) => (c.calc.fillFactor = v)),
+          chk('M-3009 Agitator Trip (catalyst settles)', () => dc['M-3009'].blockOn, (v) => (dc['M-3009'].blockOn = v)),
+          chk('P-3008A Trip / Breaker Open', () => dc['P-3008A'].blockOn, (v) => (dc['P-3008A'].blockOn = v)),
+          chk('P-3008B Trip / Breaker Open', () => dc['P-3008B'].blockOn, (v) => (dc['P-3008B'].blockOn = v)),
+          chk('XV-30054 Stem Stuck (pot outlet)', () => dc['XV-30054'].stuck, (v) => (dc['XV-30054'].stuck = v)),
+          chk('XV-30052 Stem Stuck (LIR top valve)', () => dc['XV-30052'].stuck, (v) => (dc['XV-30052'].stuck = v)),
+          chk('XV-30061 Stem Stuck (R-3001 block)', () => dc['XV-30061'].stuck, (v) => (dc['XV-30061'].stuck = v)),
+          chk('I-3001 Emergency Shutdown', () => c.ce.manual.has('I-3001'), (v) => c.ce.setManual('I-3001', v)),
+          chk('I-3002 Reactors Kill', () => c.ce.manual.has('I-3002'), (v) => c.ce.setManual('I-3002', v)),
+          chk('Low-low level C-5002 (_LALL50263)', () => c.ce.manual.has('_LALL50263'), (v) => c.ce.setManual('_LALL50263', v)),
+          faultSel('LT-30060'), faultSel('FT-30060'), faultSel('PT-30010'),
+          chk('CTLR1 Primary Network Fail', () => !c.plant.nodes[0].primaryOk, (v) => (c.plant.nodes[0].primaryOk = !v)),
+        ));
+    }
     return h(
       'aside',
       { class: 'inst-drawer' },
@@ -477,7 +522,7 @@ export class App {
       if (!this.paused) {
         const dt = realDt * this.speed;
         const steps = Math.max(1, Math.ceil(dt / 0.1));
-        for (let i = 0; i < steps; i++) this.plant.tick(dt / steps);
+        for (let i = 0; i < steps; i++) { this.t.plant.tick(dt / steps); this.cat.plant.tick(dt / steps); }
       }
       this.refresh();
     }, 100);

@@ -1,6 +1,7 @@
 import type { App } from './app';
 import { fmt, h, makeStage, s } from './dom';
 import { aiGem, controlValveGem, emGem, motorGem, pidGem, valveGem, type Gem } from './gems';
+import { catalystCE, catalystDisplay, catalystTrends } from './catalystDisplay';
 import { penPaths, TrendChart } from './trend';
 
 /** Een procesdisplay (zoals een DeltaV-graphic): id, titel, revisie en een bouwfunctie die gems en animaties levert. */
@@ -22,6 +23,8 @@ export interface DisplayDef {
   level: 1 | 2 | 3 | 4;
   /** parent-display (voor de UP-pijl en de tab-dropdown) */
   parent?: string;
+  /** site (plant-instantie) waartoe het display behoort; standaard TANK101 */
+  site?: 'TANK101' | 'CATALYST';
   build(app: App): DisplayInstance;
 }
 
@@ -143,13 +146,14 @@ const overview: DisplayDef = {
     stage.append(
       h('div', { class: 'ov-title' }, 'PLANT OVERVIEW'),
       tile('T101', 'TANK101', 120, 160, 'TANK101'),
+      tile('CAT', 'CATALYST FEED', 320, 160, 'CATALYST'),
     );
     return {
       el: outer,
       gems: [],
       update: () => {
         for (const t of tiles) {
-          const r = t.unit ? app.alarms.rollup(new Set(app.plant.units.find((u) => u.tag === t.unit)?.modules ?? [])) : { top: null, count: 0, unacked: false };
+          const r = t.unit ? app.alarms.rollup(new Set(app.plantOfUnit(t.unit)?.units.find((u) => u.tag === t.unit)?.modules ?? [])) : { top: null, count: 0, unacked: false };
           t.el.className = 'ov-tile' + (r.top ? ` p-${r.top.toLowerCase()}` : '') + (r.unacked ? ' unack' : '');
         }
       },
@@ -157,6 +161,6 @@ const overview: DisplayDef = {
   },
 };
 
-export const DISPLAYS: DisplayDef[] = [overview, tank101, trends];
+export const DISPLAYS: DisplayDef[] = [overview, tank101, trends, catalystDisplay, catalystCE, catalystTrends];
 export const DISPLAY_SET = { name: 'MainProcess', home: 'OVERVIEW' };
 export const displayChildren = (id: string): DisplayDef[] => DISPLAYS.filter((d) => d.parent === id);

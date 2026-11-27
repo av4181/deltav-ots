@@ -57,3 +57,10 @@ Motor Control, Regulatory Control, Trending, Cascade, Unit Alarms, Equipment Mod
   zwarte SP-rand, Accept, State Transition (Time Limit / Elapsed), Device State, Fail Alarm. EM: Run Command, Run, Restart Current Command.
 - Kleurconventie in `src/dv.css` (variabelen bovenaan): klep/pomp open = groen, dicht = donker; alarmkleuren volgens DeltaV.
 - OTS-functies (reset, scenario's, instructeur, snelheid, pauze) staan in een aparte donkere strook bovenaan; die bestaan niet in echt DeltaV.
+
+## v0.4 – Catalyst Feed & Interface (HDPE slice 1)
+- Nieuwe site **CATALYST** naast TANK101 (eigen plant, eigen alarmlijst; wisselt automatisch met het display). Display `CATALYST FEED`, `C&E`, `TRENDS`.
+- Tags: licensing-tags waar bekend (FV/FT/LT/FIC-30060, XV-30061/62/63, HS-30129, SEQ-3050, I-3001/I-3002, P-3008A/B); overige tags (XV-30050…57, PIC-30010, PT-30060, DI-30060, …) zijn **OTS-toewijzingen** → verifiëren met de licensor-P&ID.
+- SEQ-3050A (Cr) / 3050B (Zg) + berekening 3050C (concentratieschatting vs. werkelijke concentratie; instructeur kan potvulling en aangenomen vulfactor verstoren).
+- Aannames: pompcapaciteit 3,2 m³/h (PPT: 2,2); één logische set charge-pot-kleppen; vereenvoudigde TEA; **C&E-matrix zelf gereconstrueerd** (controleer met HZS_30132/30240).
+- Toolbar-iconen en Silver-thema aangepast (tweekleurige iconen, donkere OTS-balk, vlakke tabs, vierkante badges, tabular-nums).

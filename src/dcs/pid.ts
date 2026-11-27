@@ -27,6 +27,8 @@ export class Pid implements SimModule {
   primary: Pid | null = null; // gezet op secundaire
   secondary: Pid | null = null; // gezet op primaire
   bypass = false;
+  /** SP-bron in CAS zonder PID-primary (bv. ratio/berekening door een sequence of calculatieblok) */
+  casSpProvider: (() => number) | null = null;
   pvBad = false;
   readonly limits: LimitAlarms;
   outLo = 0;
@@ -91,7 +93,7 @@ export class Pid implements SimModule {
   }
 
   setMode(m: Mode): WriteResult {
-    if (m === 'CAS' && !this.primary) return { ok: false, reason: 'No cascade primary configured: CAS not allowed' };
+    if (m === 'CAS' && !this.primary && !this.casSpProvider) return { ok: false, reason: 'No cascade primary configured: CAS not allowed' };
     if (m === 'IMAN') return { ok: false, reason: 'IMAN is set by the system' };
     if (m === this.target) return { ok: true };
     logChange(this.ctx, this, 'MODE', this.target, m);
@@ -145,6 +147,8 @@ export class Pid implements SimModule {
       case 'CAS': {
         if (this.actual === 'CAS' && this.primary) {
           this.sp = clamp(this.outToSp(this.primary.out), this.lo, this.hi);
+        } else if (this.actual === 'CAS' && this.casSpProvider) {
+          this.sp = clamp(this.casSpProvider(), this.lo, this.hi);
         }
         if (this.actual === 'CAS' && this.bypass && this.primary) {
           this.out = clamp(this.primary.out, this.outLo, this.outHi);
