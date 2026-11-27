@@ -31,11 +31,16 @@ export const catalystDisplay: DisplayDef = {
     const potC = s('rect', { x: 602, y: 350, width: 36, height: 26, class: 'tank-fill' });
     const f9 = s('rect', { x: 664, y: 590, width: 72, height: 100, class: 'tank-fill' });
     const f10 = s('rect', { x: 1004, y: 600, width: 52, height: 60, class: 'tank-fill' });
-    const agit = (cx: number, y: number) => s('g', { class: 'agit' }, s('path', { d: `M ${cx} ${y - 22} L ${cx} ${y + 28} M ${cx - 16} ${y + 28} L ${cx + 16} ${y + 28}`, class: 'sigline' }));
+    /** roerwerk: motor boven op het vat, as, twee schoepen (paddle) onderin */
+    const agit = (cx: number, top: number, bottom: number) => s('g', { class: 'agit' },
+      s('rect', { x: cx - 14, y: top - 16, width: 28, height: 14, fill: '#d5dbe6', stroke: '#1b2a4a', 'stroke-width': 2 }),
+      s('path', { d: `M ${cx} ${top - 2} L ${cx} ${bottom}`, stroke: '#1b2a4a', 'stroke-width': 3, fill: 'none' }),
+      s('path', { d: `M ${cx - 24} ${bottom - 6} L ${cx + 24} ${bottom - 6} M ${cx - 24} ${bottom - 18} L ${cx + 24} ${bottom - 18}`, stroke: '#1b2a4a', 'stroke-width': 4, 'stroke-linecap': 'round', fill: 'none' }),
+      s('path', { d: `M ${cx - 24} ${bottom - 6} L ${cx - 24} ${bottom - 18} M ${cx + 24} ${bottom - 6} L ${cx + 24} ${bottom - 18}`, stroke: '#1b2a4a', 'stroke-width': 3, fill: 'none' }));
     svg.append(
       // --- Ziegler: dagtank V-3005 + charge pot ---
       lab(20, 44, 'Zg cat drums', 'glabel'), pipe('M 20 52 L 310 52 L 310 66'),
-      V(270, 66, 80, 110), fZg, agit(310, 108), lab(358, 78, 'V-3005 Zg day tank', 'glabel b'),
+      V(270, 66, 80, 110), fZg, agit(310, 66, 150), lab(358, 78, 'V-3005 Zg day tank', 'glabel b'),
       pipe('M 310 176 L 310 312'),
       V(290, 312, 40, 68), potZ, lab(300, 306, 'Zg charge pot', 'glabel', 'end'),
       pipe('M 170 285 L 310 285'), pipe('M 330 326 L 446 326'), lab(452, 330, 'N2'),
@@ -51,10 +56,10 @@ export const catalystDisplay: DisplayDef = {
       pipe('M 500 395 L 620 395'),
       pipe('M 620 400 L 620 510'),
       // --- LIR spoeling (FV-30040) ---
-      lab(20, 505, 'LIR (from LIR cooler)', 'glabel'),
+      lab(20, 505, 'LIR from LIR cooler', 'glabel'),
       pipe('M 20 560 L 500 560 L 500 285'), pipe('M 170 560 L 170 285'), pipe('M 500 395 L 500 560'),
       // --- V-3009 ---
-      V(660, 560, 80, 150), f9, agit(700, 590), lab(700, 552, 'V-3009', 'glabel b', 'middle'),
+      V(660, 560, 80, 150), f9, agit(700, 560, 690), lab(650, 575, 'V-3009', 'glabel b', 'end'),
       pipe('M 700 710 L 700 760'), lab(812, 750, 'dump to S-3003'),
       // --- slurry naar V-3010 ---
       pipe('M 740 670 L 1000 670'),
@@ -130,22 +135,27 @@ export const catalystDisplay: DisplayDef = {
     const lvMax = sp(() => cat.par.levelMax, (v) => { cat.par.levelMax = v; }, 0, 40);
     const flushSp = sp(() => cat.par.flushSp, (v) => { cat.par.flushSp = v; }, 0, 56);
     const undConc = sp(() => cat.calc.undConc, (v) => { cat.calc.undConc = v; }, 0, 48);
-    const run = (c: string) => () => { if (!cat.startSeq(c)) toast('A command is already running – Stop first', 'error'); };
+    const run = (c: string) => () => { if (!cat.startSeq(c)) toast('A command is already running – Stop or Abort first', 'error'); };
     const typeTxt = h('b', {});
     const live = { step: h('span', {}), est: h('span', {}), pure: h('span', {}), mode: h('span', {}) };
-    const calcFrozen = h('input', { type: 'checkbox', onchange: () => { cat.calc.frozen = calcFrozen.checked; } });
+    const promptEl = h('div', { class: 'cat-prompt hidden' });
+    const calcFrozen = h('input', { type: 'checkbox', onchange: () => { if (!calcFrozen.checked) { const l = cat.plant.ai('LT-30060').pv; cat.calc.init(cat.calc.conc(l), l); } cat.calc.frozen = calcFrozen.checked; } });
     const panel = h('div', { class: 'cat-panel' },
       h('div', { class: 'cat-title' }, 'SEQ-3050  Catalyst transfer (A = Cr, B = Zg, C = concentration)'),
       h('div', { class: 'cat-row' }, 'CAT_SEL (HS-30129):', typeTxt, live.mode),
       h('div', { class: 'cat-row' },
         h('button', { class: 'ots-btn', onclick: run('SEQ-3050B (Zg)') }, 'Run 3050B Zg'), h('button', { class: 'ots-btn', onclick: run('SEQ-3050A (Cr)') }, 'Run 3050A Cr'),
-        h('button', { class: 'ots-btn', onclick: () => cat.stopSeq() }, 'Stop'), h('button', { class: 'ots-btn', onclick: () => { cat.seq.restart(); cat.repeat.on = true; } }, 'Restart step')),
+        h('button', { class: 'ots-btn', title: 'Finish the running cycle, then stop and unlock CAT_SEL', onclick: () => cat.stopSeq() }, 'Stop'),
+        h('button', { class: 'ots-btn', onclick: () => cat.holdSeq() }, 'Hold'),
+        h('button', { class: 'ots-btn', title: 'Restart at the beginning of the step where it was held', onclick: () => { if (!cat.restartStep()) toast('Sequence is not held', 'error'); } }, 'Restart step'),
+        h('button', { class: 'ots-btn', title: 'Abort immediately – must be started from the beginning', onclick: () => cat.abortSeq() }, 'Abort')),
+      promptEl,
       h('div', { class: 'cat-row' }, 'level_start', lvStart.el, '%  level_max', lvMax.el, '%  flush F', flushSp.el, 'kg/h'),
       h('div', { class: 'cat-row' }, 'SP:Cat_Conc', concSp.el, ' INIT CONC', initConc.el, 'kg/m³  Und', undConc.el, ' manual', calcFrozen),
       h('div', { class: 'cat-row' }, 'Step:', live.step),
       h('div', { class: 'cat-row' }, 'PV:Cat_Conc', live.est, 'kg/m³ · pure flow est.', live.pure, 'kg/h'),
     );
-    panel.style.cssText = 'position:absolute;left:10px;top:625px;width:500px;';
+    panel.style.cssText = 'position:absolute;left:10px;top:615px;width:500px;';
     stage.append(panel);
     const fields = [concSp, initConc, lvStart, lvMax, flushSp, undConc];
 
@@ -165,6 +175,14 @@ export const catalystDisplay: DisplayDef = {
         set(f9, 710, 150, P.level / 100);
         set(f10, 700, 140, Math.max(0, (P.p10 - 3) / 6));
         typeTxt.textContent = ' ' + (cat.dc['HS-30129'].sp === 1 ? 'ZIEGLER' : 'CHROMIUM');
+        const pr = cat.ui.prompt;
+        promptEl.classList.toggle('hidden', !pr);
+        if (pr && promptEl.dataset.t !== pr) {
+          promptEl.dataset.t = pr;
+          promptEl.replaceChildren(h('div', {}, pr),
+            h('button', { class: 'ots-btn', onclick: () => cat.answerWet('HOLD') }, 'Hold'), h('button', { class: 'ots-btn', onclick: () => cat.answerWet('CONTINUE') }, 'Continue'),
+            h('button', { class: 'ots-btn', onclick: () => cat.answerWet('EXTRA', 5) }, 'Extra time (+5 min)'));
+        } else if (!pr) delete promptEl.dataset.t;
         live.mode.textContent = cat.repeat.on ? `  · RUN (${cat.repeat.cmd})` : '  · STOP';
         const stp = cat.seq.stepLabels.find((x) => x.status === 'active' || x.status === 'failed');
         live.step.textContent = ` ${cat.seq.state === 'Failed' ? 'HELD' : cat.seq.state}${stp ? ' – ' + stp.label : ''}${cat.seq.state === 'Failed' ? ' · ' + cat.seq.errorText : ''}`;

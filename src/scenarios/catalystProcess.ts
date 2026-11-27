@@ -205,6 +205,7 @@ export class CataCalc {
   }
   vol(levelPct: number): number { return (levelPct / 100) * V3009_CAP; }
   conc(levelPct: number): number {
+    if (this.frozen) return this.last; // operator heeft de concentratie handmatig vastgezet
     const v = this.vol(levelPct);
     return v > 0.05 ? this.cata / v : this.last;
   }
@@ -216,7 +217,7 @@ export class CataCalc {
     this.t += dt;
     while (this.t >= this.dt) {
       this.t -= this.dt;
-      if (this.frozen) continue;
+      if (this.frozen) { this.transferFlag = null; this.concCalcFlag = true; continue; } // geen herberekening; sequentie mag doorgaan
       if (this.transferFlag) { this.cata += this.potMass(this.transferFlag); this.transferFlag = null; }
       const v = this.vol(levelPct);
       this.cata = Math.max(0, this.cata - this.conc(levelPct) * (slurryKgh / dens) * (this.dt / 3600));

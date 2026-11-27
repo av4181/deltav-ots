@@ -1,4 +1,4 @@
-mport { AnalogInput } from '../dcs/ai';
+import { AnalogInput } from '../dcs/ai';
 import { CauseEffect } from '../dcs/ce';
 import { DiscreteDevice } from '../dcs/discrete';
 import { EquipmentModule, type EmStep } from '../dcs/em';
@@ -31,8 +31,17 @@ export interface Catalyst {
   /** cyclisch: na afloop wacht de sequentie op het volgende laag-niveau (zoals het DCS: RUN blijft staan tot STOP) */
   repeat: { on: boolean; cmd: string };
   tea: { r1: number; r2: number };
+  /** operator-prompt in de Wet-stap (to_wet verstreken zonder Pwet): Hold / Continue / Extra time */
+  ui: { prompt: string | null };
   startSeq(cmd: string): boolean;
+  /** STOP: de lopende cyclus wordt afgewerkt, daarna sluiten alle kleppen en wordt CAT_SEL ontgrendeld */
   stopSeq(): void;
+  /** ABORT: onmiddellijk naar Idle, alle kleppen dicht; herstart vanaf het begin */
+  abortSeq(): void;
+  holdSeq(): void;
+  /** herstart vanaf het begin van de stap waar de sequentie in HELD ging (reset Al_Pvent) */
+  restartStep(): boolean;
+  answerWet(option: 'HOLD' | 'CONTINUE' | 'EXTRA', extraMin?: number): void;
   /** DCS-schatting van de zuivere catalystflow (kg/h) = gemeten slurryflow × berekende concentratie */
   pureEstimate(): number;
 }
@@ -59,6 +68,11 @@ export function buildCatalyst(seed = 7): Catalyst {
   const par = SEQ_DEFAULTS();
   const tea = { r1: 5.1, r2: 0 };
   const repeat = { on: false, cmd: '' };
+  const ui: { prompt: string | null } = { prompt: null };
+  let locked = false; // CAT_SEL vergrendeld (LOCK in Initialisation, UNLOCK pas na STOP)
+  let alPvent = false;
+  let wetSkip = false;
+  let wetStart = 0;
 
   // ---- initiële stationaire toestand (licensing-scherm: 40,8 %, 2,5 kg/m³, 2,7 kg/h, 596 kg/h, 83,5 %) ----
   P.vol = 1.632; P.cata = 2.5 * P.vol; P.p9 = 6.5; P.p10 = 6.0; P.conc10 = 2.5;
@@ -124,7 +138,7 @@ export function buildCatalyst(seed = 7): Catalyst {
     dc[me.n2].conditions = [{ id: 'LIR_OPEN', text: `${me.top} open (backflow LIR to N2 header, I-3010-O/I-3011-O)`, blocking: () => dc[me.top].pv !== 0, bypassed: false }];
     dc[me.out].conditions = [{ id: 'OTHER_OUT', text: `${other.out} open (avoid simultaneous Cr / Zg transfer)`, blocking: () => dc[other.out].pv !== 0, bypassed: false }];
   }
-  dc['HS-30129'].conditions = [{ id: 'SEQ_LOCK', text: 'CAT_SEL locked while the transfer sequence is past its initialisation step', blocking: () => seq.state === 'Running' && seq.stepIndex > 1, bypassed: false }];
+  dc['HS-30129'].conditions = [{ id: 'SEQ_LOCK', text: 'CAT_SEL locked by SEQ-3050 (LOCK until the sequence is stopped)', blocking: () => locked, bypassed: false }];
 
   // ---- instrumenten ----
   const lt = plant.addModule(new AnalogInput(ctx, 'LT-30060', 'V-3009 catalyst slurry vessel level', UNIT, '%', 0, 100, () => P.level, [
@@ -176,9 +190,10 @@ export function buildCatalyst(seed = 7): Catalyst {
   let ramp: number | null = null; // flush-setpoint rampdoel
   const allPotTags: string[] = [...Object.values(POT_TAGS.ZG), ...Object.values(POT_TAGS.CR)].filter(Boolean);
   const cmd = (tag: string, v: 0 | 1) => dc[tag].casCommand(v);
-  const hold = (tag: string, want: 0 | 1): string | null => (dc[tag].interlocked && dc[tag].pv !== want && want === 1 ? `${tag} interlocked: ${dc[tag].blocking[0]?.text ?? ''}` : null);
+  const hold = (tag: string, want: 0 | 1): string | null => (dc[tag].blocking.length > 0 && dc[tag].pv !== want && want === 1 ? `${tag} interlocked: ${dc[tag].blocking[0]?.text ?? ''}` : null);
   const mv = (label: string, tag: string, v: 0 | 1, extra?: () => void): EmStep => ({
-    label, enter: () => { cmd(tag, v); extra?.(); }, done: () => dc[tag].pv === v, fail: () => hold(tag, v), maxTime: 30,
+    label, enter: () => { cmd(tag, v); extra?.(); }, done: () => dc[tag].pv === v,
+    fail: () => hold(tag, v) ?? (dc[tag].failActive ? `${tag} valve failure (${dc[tag].failText})` : null), maxTime: 30,
   });
   const wait = (label: string, secs: () => number): EmStep => ({ label, enter: () => { tMark = now(); }, done: () => now() - tMark >= secs(), maxTime: 1e6 });
   const flushMan = (pct: number) => { ramp = null; fic40.setMode('MAN'); fic40.out = pct; };
@@ -190,14 +205,14 @@ export function buildCatalyst(seed = 7): Catalyst {
     const mine = [T.day, T.top, T.n2, T.vent, T.out, T.bot].filter(Boolean);
     const s: EmStep[] = [
       { label: `WAIT – V-3009 level ≤ ${par.levelStart} % and CAT_SEL = ${t === 'ZG' ? 'Ziegler' : 'Chromium'}`, done: () => lt.pv <= par.levelStart && isZg() === (t === 'ZG'), maxTime: 1e9 },
-      { label: 'INITIALISATION – close all pot valves (incl. other line outlet), lock CAT_SEL', enter: () => { [...mine, other.out].forEach((v) => cmd(v, 0)); }, done: () => [...mine, other.out].every((v) => dc[v].pv === 0), maxTime: 40 },
+      { label: 'INITIALISATION – close all pot valves (incl. other line outlet), lock CAT_SEL', enter: () => { [...mine, other.out].forEach((v) => cmd(v, 0)); alPvent = false; }, done: () => { const ok = [...mine, other.out].every((v) => dc[v].pv === 0); if (ok) locked = true; return ok; }, maxTime: 40 },
       mv('N2 FLUSH – open N2 inlet', T.n2, 1),
       mv('N2 FLUSH – open bottom vent', T.vent, 1),
       wait('N2 FLUSH – vent time t_vent', () => par.tVent),
       mv('N2 FLUSH – close N2 inlet', T.n2, 0),
       {
         label: `N2 FLUSH – wait for pot pressure < ${par.pVent} barg`, enter: () => { tMark = now(); },
-        done: () => pot.p < par.pVent, fail: () => (now() - tMark > par.toPvent ? 'Al_Pvent: charge pot not depressurised within to_Pvent – sequence HELD' : null), maxTime: 1e6,
+        done: () => pot.p < par.pVent, fail: () => { if (now() - tMark > par.toPvent) { alPvent = true; return 'Al_Pvent: charge pot not depressurised within to_Pvent – sequence HELD'; } return null; }, maxTime: 1e6,
       },
       mv('N2 FLUSH – close bottom vent', T.vent, 0),
       mv('CATALYST FILL – open day tank outlet', T.day, 1),
@@ -208,9 +223,17 @@ export function buildCatalyst(seed = 7): Catalyst {
       s.push(
         mv(`WET – FV-30040 to ${par.xOpen} % (MAN), open bottom LIR inlet`, T.bot, 1, () => flushMan(par.xOpen)),
         {
-          label: `WET – pot pressure > ${par.pWet} barg for t_wet (soak)`, enter: () => { tMark = now(); },
-          done: () => { if (pot.p <= par.pWet) tMark = now(); return now() - tMark >= par.tWet; },
-          fail: () => null, maxTime: par.toWet * 1,
+          label: `WET – pot pressure > ${par.pWet} barg for t_wet (soak), timeout to_wet`, enter: () => { tMark = now(); wetStart = now(); wetSkip = false; ui.prompt = null; },
+          done: () => {
+            if (wetSkip) return true;
+            if (pot.p <= par.pWet) tMark = now();
+            if (now() - tMark >= par.tWet) return true;
+            if (!ui.prompt && now() - wetStart >= par.toWet && pot.p <= par.pWet) {
+              ui.prompt = 'Problem pressurizing the Charge Pot. Operator to HOLD or continue the sequence, or give extra time for the wet step.';
+            }
+            return false;
+          },
+          fail: () => null, maxTime: 1e9,
         },
         mv('WET – close bottom LIR inlet', T.bot, 0),
       );
@@ -250,17 +273,38 @@ export function buildCatalyst(seed = 7): Catalyst {
   seq.state = 'Complete'; seq.target = 'ABORT'; seq.pv = 'ABORT';
   const startSeq = (c: string): boolean => {
     const r = seq.run(c);
-    if (r.ok) { repeat.on = c !== 'ABORT'; repeat.cmd = c; }
+    if (r.ok) { repeat.on = true; repeat.cmd = c; alPvent = false; ui.prompt = null; }
     return r.ok;
   };
+  const cleanup = (): void => { closeAll(); locked = false; ui.prompt = null; };
   const stopSeq = (): void => {
     repeat.on = false;
-    if (seq.state === 'Running') seq.state = 'Idle';
+    // in de WACHT-stap (of na een voltooide cyclus) stopt de sequentie onmiddellijk, anders pas aan het einde van de cyclus
+    if (seq.state === 'Running' && seq.stepIndex === 0) { seq.state = 'Idle'; cleanup(); }
+    else if (seq.state !== 'Running') cleanup();
+  };
+  const abortSeq = (): void => {
+    repeat.on = false;
+    seq.state = 'Idle'; seq.error = 0; seq.errorText = '';
+    alPvent = false; cleanup();
     seq.run('ABORT');
   };
+  seq.onFail = () => { closeAll(); }; // HOLD: alle kleppen dicht, timers stoppen (herstart start de stap opnieuw)
+  const holdSeq = (): void => { seq.hold('Operator HOLD'); };
+  const restartStep = (): boolean => { alPvent = false; return seq.restartStep().ok; };
+  const answerWet = (opt: 'HOLD' | 'CONTINUE' | 'EXTRA', extraMin = 5): void => {
+    if (!ui.prompt) return;
+    if (opt === 'HOLD') { ui.prompt = null; seq.hold('Wet step: operator HOLD'); }
+    else if (opt === 'CONTINUE') { wetSkip = true; ui.prompt = null; }
+    else { par.toWet += extraMin * 60; ui.prompt = null; }
+  };
+  const alPventDef = { module: 'SEQ-3050', param: 'AL_PVENT', description: 'Al_Pvent: charge pot not depressurised', unit: UNIT, area: ctx.area, node: ctx.node, type: 'DEVICE' as const, priority: 'WARNING' as const };
   plant.onPost(() => {
-    // zodra een cyclus klaar is begint de volgende met het WACHT-stap (RUN blijft staan tot STOP)
-    if (repeat.on && seq.state === 'Complete' && seq.target === repeat.cmd) seq.run(repeat.cmd);
+    ctx.alarms.set(alPventDef, alPvent, 'Charge pot not depressurised within to_Pvent', null);
+    if (seq.state === 'Complete' && seq.target === repeat.cmd) {
+      // einde van een cyclus: RUN → wacht-stap, STOP → kleppen dicht + CAT_SEL ontgrendelen
+      if (repeat.on) seq.run(repeat.cmd); else { cleanup(); seq.target = 'ABORT'; }
+    }
   });
 
   const pumpEm = (tag: 'P-3008A' | 'P-3008B') => plant.addModule(new EquipmentModule(ctx, `EM_${tag.replace('-', '')}`, `Pump ${tag} startup / shutdown`, UNIT, {
@@ -332,5 +376,5 @@ export function buildCatalyst(seed = 7): Catalyst {
   plant.alarms.alarms.clear();
   plant.journal.records.length = 0;
   plant.historian.sample(plant.clock.now());
-  return { plant, process: P, calc, ce, dc, seq, par, repeat, tea, startSeq, stopSeq, pureEstimate };
+  return { plant, process: P, calc, ce, dc, seq, par, repeat, tea, ui, startSeq, stopSeq, abortSeq, holdSeq, restartStep, answerWet, pureEstimate };
 }

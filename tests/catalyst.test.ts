@@ -79,3 +79,66 @@ describe('Regeling convergeert', () => {
     expect(Math.abs(f.pv - f.sp) / f.sp).toBeLessThan(0.05);
   });
 });
+
+describe('SEQ-3050 – HOLD / STOP / ABORT / lock / wet / Al_Pvent', () => {
+  const stepOf = (c: ReturnType<typeof buildCatalyst>) => c.seq.stepLabels.find((x) => x.status === 'active' || x.status === 'failed')?.label ?? '';
+  it('HOLD sluit alle kleppen; Restart step herneemt dezelfde stap', () => {
+    const c = buildCatalyst(); c.dc['HS-30129'].casCommand(0); run(c, 5);
+    c.startSeq('SEQ-3050A (Cr)');
+    for (let i = 0; i < 400 && !stepOf(c).startsWith('CATALYST FILL – t_fill'); i++) c.plant.tick(0.5);
+    run(c, 3);
+    c.holdSeq();
+    run(c, 10);
+    expect(c.seq.state).toBe('Failed');
+    for (const v of Object.keys(c.dc).filter((k) => k.startsWith('KSV-'))) expect(c.dc[v].pv).toBe(0);
+    const held = c.seq.stepIndex;
+    expect(c.restartStep()).toBe(true);
+    run(c, 2);
+    expect(c.seq.state).toBe('Running');
+    expect(c.seq.stepIndex).toBeGreaterThanOrEqual(held);
+  });
+  it('CAT_SEL blijft vergrendeld tot STOP (ook in de wachtstap tussen cycli)', () => {
+    const c = buildCatalyst(); c.dc['HS-30129'].casCommand(1); run(c, 5);
+    c.startSeq('SEQ-3050B (Zg)'); run(c, 120);
+    expect(c.dc['HS-30129'].blocking.length).toBeGreaterThan(0);
+    c.stopSeq(); // maakt de cyclus af
+    expect(c.dc['HS-30129'].blocking.length).toBeGreaterThan(0);
+    for (let i = 0; i < 6000 && c.dc['HS-30129'].blocking.length > 0; i++) c.plant.tick(0.5);
+    expect(c.dc['HS-30129'].blocking.length).toBe(0);
+    expect(c.repeat.on).toBe(false);
+  });
+  it('ABORT gaat direct naar Idle', () => {
+    const c = buildCatalyst(); c.startSeq('SEQ-3050B (Zg)'); run(c, 60);
+    c.abortSeq(); run(c, 60);
+    expect(c.seq.state).not.toBe('Running');
+    expect(c.repeat.on).toBe(false);
+  });
+  it('Al_Pvent: pot niet gedrukloos binnen to_Pvent → HELD met alarm', () => {
+    const c = buildCatalyst(); c.dc['HS-30129'].casCommand(1); run(c, 5);
+    c.startSeq('SEQ-3050B (Zg)');
+    for (let i = 0; i < 200; i++) { c.process.zgPot.p = 9; c.plant.tick(0.5); } // pot blijft onder druk (bv. verstopte vent)
+    expect(c.seq.state).toBe('Failed');
+    expect(c.plant.alarms.forModule('SEQ-3050').some((a) => a.def.param === 'AL_PVENT' && a.active)).toBe(true);
+  });
+  it('Wet-timeout: prompt; Continue gaat door, Extra time rekt to_wet op', () => {
+    const c = buildCatalyst(); c.dc['HS-30129'].casCommand(0); run(c, 5);
+    c.par.toWet = 60;
+    c.startSeq('SEQ-3050A (Cr)');
+    const tick = () => { if (stepOf(c).startsWith('WET')) c.process.crPot.p = 3; c.plant.tick(0.5); }; // pot bouwt geen druk op
+    for (let i = 0; i < 1500 && !c.ui.prompt; i++) tick();
+    expect(c.ui.prompt).toBeTruthy();
+    c.answerWet('EXTRA', 1);
+    expect(c.par.toWet).toBe(120);
+    expect(c.ui.prompt).toBeNull();
+    for (let i = 0; i < 1500 && !c.ui.prompt; i++) tick();
+    expect(c.ui.prompt).toBeTruthy();
+    c.answerWet('CONTINUE');
+    run(c, 20);
+    expect(stepOf(c)).not.toMatch(/^WET/);
+  });
+  it('concentratie bevroren: handmatige waarde blijft staan en sequentie loopt door', () => {
+    const c = buildCatalyst(); c.calc.init(3.3, c.plant.ai('LT-30060').pv); c.calc.frozen = true;
+    run(c, 60);
+    expect(c.calc.conc(c.plant.ai('LT-30060').pv)).toBeCloseTo(3.3, 2);
+  });
+});

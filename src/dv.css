@@ -279,3 +279,5 @@ button { font-family: inherit; }
 .sel-m { position: absolute; left: 82px; top: 32px; background: #fff; border: 1px solid #333; color: #d9702a; font-weight: 700; font-size: 11px; padding: 0 3px; }
 .sel-m.oos { color: #666; }
 .sel-pos { font-size: 11px; font-weight: 600; margin-top: 2px; }
+.cat-prompt { background:#fff3cd; border:1px solid #b58900; padding:4px 6px; margin:3px 0; color:#4a3500; }
+.cat-prompt.hidden { display:none; }

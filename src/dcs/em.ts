@@ -31,6 +31,8 @@ export class EquipmentModule implements SimModule {
   stepTime = 0;
   maxTime = 180;
   private steps: EmStep[] = [];
+  /** wordt aangeroepen zodra de sequentie in Held/Failed gaat (bv. alle kleppen sluiten) */
+  onFail: ((msg: string) => void) | null = null;
   private failDef: AlarmDef;
 
   constructor(
@@ -99,6 +101,27 @@ export class EquipmentModule implements SimModule {
     this.error = 1;
     this.errorText = msg;
     logEvent(this.ctx, this, 'EVENT', 'COMMAND', 'FAILED', msg);
+    this.onFail?.(msg);
+  }
+
+  /** operator HOLD */
+  hold(msg = 'Operator HOLD'): WriteResult {
+    if (this.state !== 'Running') return { ok: false, reason: 'Sequence is not running' };
+    this.fail(msg);
+    return { ok: true };
+  }
+
+  /** herstart vanaf het begin van de stap waarin de sequentie viel */
+  restartStep(): WriteResult {
+    if (this.state !== 'Failed' || this.stepIndex < 0) return { ok: false, reason: 'Sequence is not held' };
+    this.state = 'Running';
+    this.error = 0;
+    this.errorText = '';
+    this.maxTimeExpired = 0;
+    this.stepTime = 0;
+    logEvent(this.ctx, this, 'EVENT', 'COMMAND', 'RESTART', `step ${this.stepIndex + 1}`);
+    this.steps[this.stepIndex].enter?.();
+    return { ok: true };
   }
 
   update(dt: number): void {
