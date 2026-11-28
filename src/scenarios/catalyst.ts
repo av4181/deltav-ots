@@ -6,6 +6,7 @@ import { Pid } from '../dcs/pid';
 import { Plant } from '../dcs/plant';
 import { CataCalc, CatalystProcess, RHO_LIR, type CataType, type PotValves } from './catalystProcess';
 import { addStaticSections } from './hdpeStatic';
+import type { ReactorProcess } from './reactorProcess';
 import { MOTOR_CFG, SELECTOR_CFG, VALVE_CFG } from './dcCfg';
 
 export const CATALYST_UNIT = 'CATALYST';
@@ -23,6 +24,7 @@ export const SEQ_DEFAULTS = (): SeqPar => ({
 
 export interface Catalyst {
   plant: Plant;
+  rx: [ReactorProcess, ReactorProcess];
   process: CatalystProcess;
   calc: CataCalc;
   ce: CauseEffect;
@@ -330,6 +332,7 @@ export function buildCatalyst(seed = 7): Catalyst {
     const T = POT_TAGS[k];
     return { day: pos(T.day), top: pos(T.top), n2: pos(T.n2), vent: pos(T.vent), out: pos(T.out), bot: T.bot ? pos(T.bot) : 0 };
   };
+  plant.onPre(() => { if (ce.manual.has('I-3002')) rx.forEach((r) => (r.killed = true)); });
   plant.onPre((dt) => {
     // C&E: FMC = force manual closed
     if (ce.effectActive('FMC FIC-30061')) { fic61.target = 'MAN'; fic61.out = 0; }
@@ -372,11 +375,11 @@ export function buildCatalyst(seed = 7): Catalyst {
     reg(p.tag, `${p.tag}/PID1/SP.CV`, 'SP', p.eu, p.lo, p.hi, () => p.sp);
     reg(p.tag, `${p.tag}/PID1/OUT.CV`, 'OUT', '%', 0, 100, () => p.out);
   }
-  addStaticSections(plant, dc, { tea1: ft80, tea2: ft81 });
+  const { rx } = addStaticSections(plant, dc, { tea1: ft80, tea2: ft81 });
   // inschakel-transiënt van de AI-filters uitlopen zodat de simulator in stationaire toestand start
   for (let i = 0; i < 240; i++) plant.tick(0.5);
   plant.alarms.alarms.clear();
   plant.journal.records.length = 0;
   plant.historian.sample(plant.clock.now());
-  return { plant, process: P, calc, ce, dc, seq, par, repeat, tea, ui, startSeq, stopSeq, abortSeq, holdSeq, restartStep, answerWet, pureEstimate };
+  return { plant, rx, process: P, calc, ce, dc, seq, par, repeat, tea, ui, startSeq, stopSeq, abortSeq, holdSeq, restartStep, answerWet, pureEstimate };
 }

@@ -293,3 +293,5 @@ button { font-family: inherit; }
 .pid-svg .oos-mark { font: 700 64px 'Segoe UI', Arial; fill: rgba(90,100,120,.35); }
 .pid-svg .oos-mark.hidden { display: none; }
 .pid-svg .glabel.dim { fill: #55607a; font-weight: 500; font-size: 11px; }
+.pid-svg .zone-line { stroke: #8a94a0; stroke-width: 1.5; stroke-dasharray: 6 5; }
+.pid-svg .plate { stroke: #5d7390; stroke-width: 1.5; opacity: .7; }

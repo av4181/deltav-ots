@@ -145,7 +145,7 @@ export const reactorOverview: DisplayDef = {
       t.qi.forEach((tag, i) => add(aiGem(app, tag, ix, 88 + i * 46)));
     });
     svg.append(lab(1115, 262, 'to Degassing ►', 'glabel'), lab(1190, 222, '', 'glabel'), pipe('M 1090 270 L 1255 270'));
-    svg.append(lab(1262, 80, 'Production', 'glabel dim'));
+    svg.append(lab(1262, 80, 'Production', 'glabel dim'), navLink(app, 1130, 640, 'Reactor cooling ►', 'COOL'));
     stage.prepend(svg);
     // Intermediate treatment gems
     add(selectorGem(app, 'HS-30500', 345, 680, ['In service', 'OOS']));
@@ -162,6 +162,69 @@ export const reactorOverview: DisplayDef = {
       el: outer, gems,
       update: () => { oos.setAttribute('class', 'oos-mark' + (app.plant.dc('HS-30500').pv === 1 ? ' hidden' : '')); },
     };
+  },
+};
+
+
+/* ============================================================ REACTOR COOLING (dubbele mantel, gesloten koelcircuit) ============================================================ */
+export const reactorCooling: DisplayDef = {
+  id: 'COOL', nav: 'RX COOLING', title: 'Reactor Cooling – jackets, plate coolers and cooling water', revisions: ['REV.1  28-11-26'], unit: 'R3001', units: ['R3001', 'R3002'], site: 'CATALYST', level: 3, parent: 'REACT',
+  build(app) {
+    const W = 1440, H = 830;
+    const { outer, stage } = makeStage(W, H);
+    const svg = s('svg', { viewBox: `0 0 ${W} ${H}`, width: W, height: H, class: 'pid-svg' });
+    const gems: Gem[] = []; const add = adder(stage, gems);
+    svg.append(s('line', { x1: 720, y1: 20, x2: 720, y2: H - 20, class: 'zone-line' }));
+    ([1, 2] as const).forEach((n) => {
+      const ox = n === 1 ? 0 : 720;
+      const tic = n === 1 ? 'TIC-30120' : 'TIC-30160';
+      const k = n === 1 ? { fi: 'FI-30121', ts: 'TI-30121', tr: 'TI-30122', cws: 'TI-30124', cwr: 'TI-30125', pdi: 'PDI-30121', pump: 'P-3011', kill: 'XV-30110', ti: [130, 133, 123, 126], cool: 'E-3002' } : { fi: 'FI-30161', ts: 'TI-30161', tr: 'TI-30162', cws: 'TI-30164', cwr: 'TI-30165', pdi: 'PDI-30161', pump: 'P-3012', kill: 'XV-30150', ti: [170, 174, 163, 166], cool: 'E-3003' };
+      const cys = [190, 310];
+      svg.append(
+        lab(ox + 20, 28, `R-300${n} cooling system`, 'glabel b'),
+        // reactor met mantel
+        loopReactor(app, ox + 30, 120, 150, 230, `R-300${n}`, `REACT${n}`),
+        s('rect', { x: ox + 30, y: 175, width: 22, height: 120, class: 'jacket' }), s('rect', { x: ox + 158, y: 175, width: 22, height: 120, class: 'jacket' }),
+        lab(ox + 105, 112, 'double jacket', 'glabel dim', 'middle'),
+        // warme lus: reactor-uitlaat → hot header
+        pipe(`M ${ox + 180} 150 L ${ox + 270} 150 L ${ox + 270} ${cys[1] - 18}`), lab(ox + 190, 142, 'hot', 'glabel dim'),
+        // koude lus: cold header → strainers → pomp → mantel
+        pipe(`M ${ox + 250} ${cys[0] + 18} L ${ox + 250} 430 L ${ox + 105} 430 L ${ox + 105} 350`),
+        s('rect', { x: ox + 180, y: 414, width: 44, height: 32, class: 'vessel' }), lab(ox + 202, 466, 'strainers', 'glabel dim', 'middle'),
+        // CW headers
+        pipe(`M ${ox + 480} 70 L ${ox + 480} ${cys[1] - 18}`), pipe(`M ${ox + 520} ${cys[0] + 18} L ${ox + 520} ${cys[1] + 18} L ${ox + 520} 540`),
+        lab(ox + 440, 62, 'CWS', 'glabel b', 'middle'), lab(ox + 520, 560, 'CWR', 'glabel b', 'middle'),
+      );
+      cys.forEach((cy, i) => {
+        const sfx = i === 0 ? 'A' : 'B';
+        svg.append(
+          s('rect', { x: ox + 300, y: cy - 34, width: 90, height: 68, class: 'vessel' }),
+          ...[0, 1, 2, 3, 4, 5].map((j) => s('line', { x1: ox + 312 + j * 14, y1: cy - 30, x2: ox + 312 + j * 14, y2: cy + 30, class: 'plate' })),
+          lab(ox + 345, cy + 52, `${k.cool}${sfx}`, 'glabel b', 'middle'),
+          pipe(`M ${ox + 270} ${cy - 18} L ${ox + 300} ${cy - 18}`), pipe(`M ${ox + 300} ${cy + 18} L ${ox + 250} ${cy + 18}`),
+          pipe(`M ${ox + 480} ${cy - 18} L ${ox + 390} ${cy - 18}`), pipe(`M ${ox + 390} ${cy + 18} L ${ox + 520} ${cy + 18}`),
+        );
+        add(controlValveGem(app, tic, ox + 384, cy - 18 - 40, { label: `${n === 1 ? 'TCV-30120' : 'TCV-30160'}${sfx}`, pos: () => app.plant.pid(tic).out }));
+      });
+      add(motorGem(app, k.pump, ox + 70, 396));
+      add(pidGem(app, tic, ox + 560, 90));
+      add(aiGem(app, k.fi, ox + 560, 205)); add(aiGem(app, k.pdi, ox + 560, 255));
+      add(aiGem(app, k.cws, ox + 560, 315)); add(aiGem(app, k.cwr, ox + 560, 365));
+      add(aiGem(app, k.ts, ox + 560, 425)); add(aiGem(app, k.tr, ox + 560, 475));
+      k.ti.forEach((x, i) => add(aiGem(app, `TI-30${x}`, ox + 20 + i * 105, 560)));
+      add(valveGem(app, k.kill, ox + 24, 40, {}));
+      svg.append(lab(ox + 110, 78, 'KILL gas (CO)', 'glabel dim'));
+      svg.append(navLink(app, ox + 560, 560, `R-300${n} detail ►`, `REACT${n}`));
+      add(aiGem(app, n === 1 ? 'JI-30001' : 'JI-30002', ox + 560, 590));
+    });
+    stage.prepend(svg);
+    // trend onderaan (beide reactoren)
+    const paths = ['TI-30130', 'TI-30170', 'FI-30121', 'FI-30161'].flatMap((m) => penPaths(app, m));
+    const chart = new TrendChart(app, paths, { axes: true, height: 150, span: 900 });
+    const tr = h('div', { class: 'rx-trend' }, h('div', { class: 'trend-title' }, 'Reactor temperatures and cooling water flows'), chart.el);
+    tr.style.cssText = 'position:absolute;left:20px;top:640px;width:1400px;';
+    stage.append(tr);
+    return { el: outer, gems, update: () => chart.draw(), dispose: () => chart.dispose() };
   },
 };
 
@@ -205,7 +268,7 @@ const detail = (n: 1 | 2): DisplayDef => {
       add(pidGem(app, t.tic, 1050, 410)); add(pidGem(app, t.pic, 1050, 490));
       add(aiGem(app, n === 1 ? 'DI-30131' : 'DI-30161', 880, 410)); add(aiGem(app, n === 1 ? 'PI-30341' : 'PI-30342', 880, 456)); add(aiGem(app, n === 1 ? 'FI-30341' : 'FI-30342', 880, 502));
       add(aiGem(app, t.prod, 1250, 200));
-      svg.append(lab(1250, 262, 'Product properties', 'glabel b'));
+      svg.append(lab(1250, 262, 'Product properties', 'glabel b'), navLink(app, 880, 580, 'Reactor cooling system ►', 'COOL'));
       ['MI pred', 'MI lab', 'Dens pred', 'Dens lab'].forEach((l, i) => { svg.append(lab(1250, 292 + i * 50, l, 'glabel dim')); add(aiGem(app, t.qi[i], 1250, 296 + i * 50)); });
       // trend onderaan
       const paths = [...t.ti.slice(0, 1), t.pic, t.hsr, t.c2].flatMap((m) => penPaths(app, m));

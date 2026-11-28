@@ -74,3 +74,16 @@ Motor Control, Regulatory Control, Trending, Cascade, Unit Alarms, Equipment Mod
 - HS-30500 (Intermediate Treatment) staat standaard "in service"; de R-3002 katalysator- en co-katalysatorvoeding staat standaard dicht.
 - Alarmrollup op tegel/tab werkt nu over meerdere units (`unit?: string | string[]`).
 - Links: reactor → detail, "Catalyst" → CAT, "Co-catalyst" → COCAT, "To R-300x" → detail.
+
+## v0.6 – Reactor cooling en scenario "High reactor temperature"
+- Nieuw display `COOL` (Rx Cooling, niveau 3 onder REACTORS): dubbele mantel, gesloten koelwaterlus (pomp P-3011/3012, strainers), plaatkoelers E-3002A/B en E-3003A/B met twee regelkleppen per reactor (TCV-30120A/B, TCV-30160A/B; één TIC, beide kleppen gelijk), CWS/CWR en trend. Bereikbaar via de link op het reactoroverzicht en de reactordetails.
+- `src/scenarios/reactorProcess.ts`: thermisch model per reactor (reactiewarmte 3558 kJ/kg PE, Arrhenius, mantel, koelwaterlus, ε-NTU plaatkoelers, KILL). Parameters worden uit de nominale toestand afgeleid; stationair bij start.
+- TIC-30120/30160 zijn nu echte regelaars (gemiddelde van 4 TI's). Alarmen: TI HI (SP+2) en HIHI (SP+5), koelwaterflow LO, jacket return HI.
+- Scenario (instructeurspaneel, "Reactors – high temperature"): *restrict valves to plate coolers* (analoog aan MCL `WMr_restrict_valves_to_plate_coolers`), strainer plugging, plate cooler fouling, catalyst activity, pomptrips, TI-fouten, optionele AUTO KILL. Operator kill: open XV-30110 / XV-30150 (of C&E I-3002). Reset in het paneel.
+- Aannames: koelkringtags (FI-30121, TI-30121/2/4/5, PDI-30121, P-3011/12, XV-30110/30150, TI-30126/30166) en de plaatkoelers E-3002/3003 A/B zijn afgeleid, niet uit een P&ID; de Shell-graphics bevatten geen apart koelscherm (enkel de link E43002). Katalysatoractiviteit is nog niet gekoppeld aan het katalysatorscherm.
+
+## v0.7 – Ziegler-Natta kinetiek in de reactoren
+- `src/model/zieglerModel.ts` = ongewijzigde kopie van `calculateReactionRates` uit repo av4181/Ziegler.
+- `src/model/zieglerReactor.ts`: CSTR rond die kinetiek (toestanden M1, M2, H2, N0, N1/N2, Y0 per site-type; stijve integratie). Katalysatoractivering is quasi-oogenblikkelijk (ka/kaa ≈ 1e18); de katalysatorvoeding wordt bij constructie gekalibreerd op de nominale productie (R-3001 12,4 t/h, conversie ≈ 85 %). Resultaten worden gecachet.
+- `ReactorProcess` gebruikt nu die kinetiek in plaats van een vaste Arrhenius-factor: Rp hangt af van T, C2-flow, H2-flow (FIC-…104/108), katalysatorvoeding en verblijftijd. Warmtemassa verhoogd (slurry + staal).
+- Nog niet gebruikt: Cr-katalysator (S1/kaH-pad), momenten Y1/Y2 en dode polymeermomenten (→ MI/dichtheid-voorspelling QI-3x01/03), hexeen-dynamiek (vaste voedingsconcentratie), koppeling met het katalysatorscherm, en de Fortran-rekenblokken (absorptie, degassing).

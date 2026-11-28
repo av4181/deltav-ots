@@ -1,7 +1,7 @@
 import type { App } from './app';
 import { fmt, h, makeStage, s } from './dom';
 import { aiGem, controlValveGem, emGem, motorGem, pidGem, valveGem, type Gem } from './gems';
-import { cocatDisplay, reactor1Display, reactor2Display, reactorOverview } from './reactorDisplays';
+import { cocatDisplay, reactor1Display, reactor2Display, reactorCooling, reactorOverview } from './reactorDisplays';
 import { catalystCE, catalystDisplay, catalystTrends } from './catalystDisplay';
 import { penPaths, TrendChart } from './trend';
 
@@ -20,6 +20,8 @@ export interface DisplayDef {
   revisions: string[];
   /** unit waarvan het alarmrollup-kleur op de navigatieknop komt */
   unit?: string;
+  /** extra units voor alarm-rollup (naast `unit`) */
+  units?: string[];
   /** hiërarchieniveau (1 = overzicht … 4 = diagnose, zoals in DeltaV Live display sets) */
   level: 1 | 2 | 3 | 4;
   /** parent-display (voor de UP-pijl en de tab-dropdown) */
@@ -165,6 +167,6 @@ const overview: DisplayDef = {
   },
 };
 
-export const DISPLAYS: DisplayDef[] = [overview, tank101, trends, catalystDisplay, catalystCE, catalystTrends, cocatDisplay, reactorOverview, reactor1Display, reactor2Display];
+export const DISPLAYS: DisplayDef[] = [overview, tank101, trends, catalystDisplay, catalystCE, catalystTrends, cocatDisplay, reactorOverview, reactor1Display, reactor2Display, reactorCooling];
 export const DISPLAY_SET = { name: 'MainProcess', home: 'OVERVIEW' };
 export const displayChildren = (id: string): DisplayDef[] => DISPLAYS.filter((d) => d.parent === id);

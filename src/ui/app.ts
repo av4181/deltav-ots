@@ -431,6 +431,23 @@ export class App {
           chk('I-3001 Emergency Shutdown', () => c.ce.manual.has('I-3001'), (v) => c.ce.setManual('I-3001', v)),
           chk('I-3002 Reactors Kill', () => c.ce.manual.has('I-3002'), (v) => c.ce.setManual('I-3002', v)),
           chk('Low-low level C-5002 (_LALL50263)', () => c.ce.manual.has('_LALL50263'), (v) => c.ce.setManual('_LALL50263', v)),
+          h('div', { class: 'watch-head' }, 'Reactors – high temperature (Wuhan scenario)'),
+          h('button', { class: 'ots-btn', onclick: () => { c.rx.forEach((r) => (r.restrict = 0.7)); this.logInstructor('WMr_restrict_valves_to_plate_coolers', 'ON'); } }, 'Run: restrict valves to plate coolers (both reactors)'),
+          h('button', { class: 'ots-btn', onclick: () => { c.rx.forEach((r) => { r.restrict = 0; r.strainer = 0; r.foul = 0; r.catMult = 1; r.reset(); }); this.logInstructor('Reactor malfunctions', 'RESET'); } }, 'Reset all reactor malfunctions'),
+          ...([0, 1] as const).flatMap((i) => {
+            const r = c.rx[i]; const nm = `R-300${i + 1}`;
+            return [
+              slider(`${nm} restrict cooling-water valves to plate coolers`, 0, 0.9, 0.05, () => r.restrict, (v) => (r.restrict = v)),
+              slider(`${nm} cooling-water strainers plugging`, 0, 1, 0.05, () => r.strainer, (v) => (r.strainer = v)),
+              slider(`${nm} plate coolers fouling`, 0, 1, 0.05, () => r.foul, (v) => (r.foul = v)),
+              slider(`${nm} catalyst activity (x nominal)`, 0.5, 2, 0.05, () => r.catMult, (v) => (r.catMult = v)),
+              chk(`${nm} circulation pump P-300${i + 1} trip`, () => dc[`P-300${i + 1}`].blockOn, (v) => (dc[`P-300${i + 1}`].blockOn = v)),
+              chk(`${nm} jacket pump P-301${i + 1} trip`, () => dc[`P-301${i + 1}`].blockOn, (v) => (dc[`P-301${i + 1}`].blockOn = v)),
+              chk(`${nm} AUTO KILL at ${r.killTemp} °C`, () => r.autoKill, (v) => (r.autoKill = v)),
+              faultSel(i === 0 ? 'TI-30130' : 'TI-30170'),
+            ];
+          }),
+          h('div', { class: 'watch-head' }, 'Catalyst feed'),
           faultSel('LT-30060'), faultSel('FT-30060'), faultSel('PT-30010'), faultSel('PT-30044'),
           chk('CTLR1 Primary Network Fail', () => !c.plant.nodes[0].primaryOk, (v) => (c.plant.nodes[0].primaryOk = !v)),
         ));
@@ -544,8 +561,10 @@ export class App {
       const mods = new Set<string>();
       const collect = (did: string) => {
         const d = DISPLAYS.find((x) => x.id === did);
-        const u = d?.unit ? this.plantOfUnit(d.unit)?.units.find((x) => x.tag === d.unit) : undefined;
-        u?.modules.forEach((m) => mods.add(m));
+        for (const ut of [d?.unit, ...(d?.units ?? [])]) {
+          const u = ut ? this.plantOfUnit(ut)?.units.find((x) => x.tag === ut) : undefined;
+          u?.modules.forEach((m) => mods.add(m));
+        }
         displayChildren(did).forEach((k) => collect(k.id));
       };
       collect(def?.id ?? id);
